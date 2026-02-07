@@ -3,10 +3,45 @@
 
 shell_path = "/bin/bash"
 allowed_commands = [
-  "ls", "cat", "grep", "rg", "find", "pwd", "cd", "echo", "head", "tail", "wc", "sed", "awk",
-  "git", "python", "python3", "pip", "pip3", "node", "npm", "pnpm", "yarn", "uv", "az", "ffmpeg", "curl", "ps", "az", "sort", "read"
+  "ls",
+  "cat",
+  "grep",
+  "rg",
+  "find",
+  "pwd",
+  "cd",
+  "echo",
+  "head",
+  "tail",
+  "wc",
+  "sed",
+  "awk",
+  "git",
+  "python",
+  "python3",
+  "pip",
+  "pip3",
+  "node",
+  "npm",
+  "pnpm",
+  "yarn",
+  "uv",
+  "az",
+  "ffmpeg",
+  "curl",
+  "ps",
+  "az",
+  "sort",
+  "read",
 ]
-forbidden_paths = ["*.env", "**/.env", "**/.env.*", "**/.ssh/**", "**/id_rsa", "**/id_ed25519"]
+forbidden_paths = [
+  "*.env",
+  "**/.env",
+  "**/.env.*",
+  "**/.ssh/**",
+  "**/id_rsa",
+  "**/id_ed25519",
+]
 
 [[forbidden_command_rules]]
 binary = "rm"
