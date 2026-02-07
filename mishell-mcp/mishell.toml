@@ -1,0 +1,32 @@
+# Mishell MCP policy
+# Edit then use UI Reload to apply changes.
+
+shell_path = "/bin/bash"
+allowed_commands = [
+  "ls", "cat", "grep", "rg", "find", "pwd", "cd", "echo", "head", "tail", "wc", "sed", "awk",
+  "git", "python", "python3", "pip", "pip3", "node", "npm", "pnpm", "yarn", "uv", "az", "ffmpeg", "curl", "ps", "az", "sort", "read"
+]
+forbidden_paths = ["*.env", "**/.env", "**/.env.*", "**/.ssh/**", "**/id_rsa", "**/id_ed25519"]
+
+[[forbidden_command_rules]]
+binary = "rm"
+arg_globs = ["-rf", "-fr"]
+description = "Block recursive+force deletion"
+
+[[forbidden_command_rules]]
+binary = "rm"
+arg_globs = ["--recursive", "--force"]
+description = "Block recursive+force deletion"
+
+[defaults]
+timeout_s = 120
+max_output_chars = 200000
+max_command_chars = 50000
+max_sessions = 32
+
+[server]
+http_host = "127.0.0.1"
+http_port = 8067
+
+[ui]
+enabled = true
