@@ -5,37 +5,70 @@ FastMCP server exposing guarded shell access with:
 - allowlisted commands + forbidden command rules
 - forbidden path globs (including `*.env` style)
 - localhost admin UI for config view/edit/reload
+- E2B sandbox execution by default (`--dangerous` required for local host shell)
 
 ## Install
 
 ```bash
-uv sync --extra dev
+make setup
 ```
 
 ## Run
 
-HTTP + UI (localhost `127.0.0.1:8067`):
+Default safe mode (E2B sandbox) + HTTP UI:
 
 ```bash
-uv run mishell-mcp serve-http --config ./mishell.toml
+make run-http
 ```
 
-STDIO MCP mode:
+Default safe mode (E2B sandbox) + STDIO MCP:
 
 ```bash
-uv run mishell-mcp serve-stdio --config ./mishell.toml
+make run-stdio
+```
+
+Local host shell mode (dangerous, explicit opt-in):
+
+```bash
+make run-http-dangerous
 ```
 
 ## Test
 
 ```bash
-uv run pytest -q
+make test
+```
+
+## E2B Setup
+
+Mishell reads `E2B_API_KEY` first, then `E2B_KEY` (including from local `.env`).
+
+```bash
+echo 'E2B_KEY=your-key' >> .env
+```
+
+E2B sandbox settings live under `[e2b]` in `mishell.toml`:
+
+```toml
+[e2b]
+template = "mishell-template" # template name or id, empty uses E2B default
+timeout_s = 600
+secure = true
+allow_internet_access = true
+start_cwd = "/home/user"
+```
+
+You can build a dedicated template using `e2b/template.toml` and `e2b/mishell.Dockerfile`:
+
+```bash
+make e2b-template-build
 ```
 
 ## MCP Tools
 
 - `shell_policy_get`
   - Returns effective allowed commands, forbidden rules, forbidden paths, defaults.
+  - Includes execution mode (`e2b-sandbox` or `local-dangerous`) and E2B settings.
   - Tool description tells LLM to call this first.
 
 - `shell_exec`

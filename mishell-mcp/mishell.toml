@@ -65,3 +65,11 @@ http_port = 8067
 
 [ui]
 enabled = true
+
+[e2b]
+# Template name or ID. Keep empty to use E2B default template.
+template = ""
+timeout_s = 600
+secure = true
+allow_internet_access = true
+start_cwd = "/home/user"

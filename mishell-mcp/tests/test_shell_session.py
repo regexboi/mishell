@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+import pytest
 
 from mishell_mcp.config import PolicyConfig, sample_policy_dict
-from mishell_mcp.shell_session import SessionManager
+from mishell_mcp.shell_session import SessionManager, _strip_cwd_marker
 
 
 def test_session_persists_cwd() -> None:
@@ -24,3 +25,17 @@ def test_session_persists_cwd() -> None:
         assert target in after.out.strip()
     finally:
         manager.close_all()
+
+
+def test_e2b_backend_requires_key() -> None:
+    cfg = PolicyConfig.model_validate(sample_policy_dict())
+    with pytest.raises(RuntimeError, match="E2B"):
+        SessionManager(cfg, backend="e2b", e2b_api_key=None)
+
+
+def test_strip_cwd_marker() -> None:
+    token = "abc123"
+    stderr = "warning\n__MISHELL_CWD_abc123:/tmp/demo\n"
+    cwd, cleaned = _strip_cwd_marker(stderr, token=token, fallback_cwd="/home/user")
+    assert cwd == "/tmp/demo"
+    assert cleaned == "warning\n"

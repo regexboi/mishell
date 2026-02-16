@@ -1,0 +1,4 @@
+# E2B template config for Mishell.
+# After your first successful build, E2B CLI can write template_id here.
+
+dockerfile = "mishell.Dockerfile"

@@ -1,11 +1,12 @@
 SHELL := /bin/bash
 
 UV ?= uv
+E2B ?= e2b
 CONFIG ?= ./mishell.toml
 PORT ?= 8067
 PYTEST_ARGS ?= -q
 
-.PHONY: help setup sync lock test run-http run-stdio ui config reload smoke clean
+.PHONY: help setup sync lock test run-http run-http-dangerous run-stdio run-stdio-dangerous e2b-template-build ui config reload smoke clean
 
 help: ## Show available commands
 	@echo "mishell-mcp common commands"
@@ -27,8 +28,17 @@ test: ## Run test suite
 run-http: ## Start HTTP server + UI on localhost
 	$(UV) run mishell-mcp serve-http --config $(CONFIG) --port $(PORT)
 
+run-http-dangerous: ## Start HTTP server + UI in local dangerous mode
+	$(UV) run mishell-mcp serve-http --config $(CONFIG) --port $(PORT) --dangerous
+
 run-stdio: ## Start STDIO MCP server
 	$(UV) run mishell-mcp serve-stdio --config $(CONFIG)
+
+run-stdio-dangerous: ## Start STDIO MCP server in local dangerous mode
+	$(UV) run mishell-mcp serve-stdio --config $(CONFIG) --dangerous
+
+e2b-template-build: ## Build E2B template from ./e2b/template.toml
+	cd e2b && $(E2B) template build
 
 ui: ## Open local UI page (macOS)
 	open http://127.0.0.1:$(PORT)/

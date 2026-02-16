@@ -38,6 +38,14 @@ class UIConfig(BaseModel):
     enabled: bool = True
 
 
+class E2BConfig(BaseModel):
+    template: str | None = None
+    timeout_s: int = 600
+    secure: bool = True
+    allow_internet_access: bool = True
+    start_cwd: str = "/home/user"
+
+
 class PolicyConfig(BaseModel):
     shell_path: str = DEFAULT_SHELL_PATH
     allowed_commands: list[str] = Field(default_factory=list)
@@ -46,6 +54,7 @@ class PolicyConfig(BaseModel):
     defaults: RuntimeDefaults = Field(default_factory=RuntimeDefaults)
     server: ServerConfig = Field(default_factory=ServerConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
+    e2b: E2BConfig = Field(default_factory=E2BConfig)
 
 
 @dataclass
@@ -115,6 +124,13 @@ def sample_policy_dict() -> dict[str, Any]:
             "http_port": DEFAULT_HTTP_PORT,
         },
         "ui": {"enabled": True},
+        "e2b": {
+            "template": None,
+            "timeout_s": 600,
+            "secure": True,
+            "allow_internet_access": True,
+            "start_cwd": "/home/user",
+        },
     }
 
 
@@ -151,6 +167,14 @@ http_port = 8067
 
 [ui]
 enabled = true
+
+[e2b]
+# Template name or ID. Keep empty to use E2B default template.
+template = ""
+timeout_s = 600
+secure = true
+allow_internet_access = true
+start_cwd = "/home/user"
 """
 
 
@@ -244,6 +268,8 @@ class ConfigManager:
             raise ValueError(f"Config validation error: {exc}") from exc
 
         cfg.allowed_commands = _normalize_binary_list(cfg.allowed_commands)
+        if cfg.e2b.template is not None and not cfg.e2b.template.strip():
+            cfg.e2b.template = None
         if cfg.server.http_host != "127.0.0.1":
             raise ValueError("Only localhost host binding is allowed; set server.http_host=127.0.0.1")
 

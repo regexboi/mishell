@@ -20,6 +20,7 @@ from .ui import UI_HTML
 @dataclass
 class AppState:
     config_path: Path
+    execution_mode: str
     config: ConfigManager
     policy: PolicyEngine
     sessions: SessionManager
@@ -32,22 +33,28 @@ class AppState:
 
 
 class MishellApp:
-    def __init__(self, config_path: str | Path):
-        self.state = self._build_state(config_path)
+    def __init__(self, config_path: str | Path, *, dangerous: bool = False, e2b_api_key: str | None = None):
+        self.state = self._build_state(config_path, dangerous=dangerous, e2b_api_key=e2b_api_key)
         self.mcp = FastMCP("Mishell MCP")
         self._register_tools()
         self._register_routes()
 
     @staticmethod
-    def _build_state(config_path: str | Path) -> AppState:
+    def _build_state(config_path: str | Path, *, dangerous: bool, e2b_api_key: str | None) -> AppState:
         manager = ConfigManager(config_path)
         manager.load_startup()
         cfg = manager.get_config()
+        execution_mode = "local-dangerous" if dangerous else "e2b-sandbox"
         return AppState(
             config_path=Path(config_path),
+            execution_mode=execution_mode,
             config=manager,
             policy=PolicyEngine(cfg),
-            sessions=SessionManager(cfg),
+            sessions=SessionManager(
+                cfg,
+                backend="local" if dangerous else "e2b",
+                e2b_api_key=e2b_api_key,
+            ),
         )
 
     def _register_tools(self) -> None:
@@ -61,10 +68,12 @@ class MishellApp:
                 "policy_hash": self.state.config.policy_hash(),
                 "source": st.source,
                 "warning": st.warning,
+                "execution_mode": self.state.execution_mode,
                 "allowed_commands": cfg.allowed_commands,
                 "forbidden_command_rules": [rule.model_dump(exclude_none=True) for rule in cfg.forbidden_command_rules],
                 "forbidden_paths": cfg.forbidden_paths,
                 "defaults": cfg.defaults.model_dump(),
+                "e2b": cfg.e2b.model_dump(),
             }
             return {
                 "txt": _policy_text(payload),
@@ -194,7 +203,7 @@ def _policy_text(payload: dict[str, Any]) -> str:
     forb_paths = ",".join(payload["forbidden_paths"])
     warning = payload.get("warning")
     base = [
-        f"ok policy_hash={payload['policy_hash']} source={payload['source']}",
+        f"ok policy_hash={payload['policy_hash']} source={payload['source']} mode={payload['execution_mode']}",
         f"allowed_commands:{allowed}",
         f"forbidden_paths:{forb_paths}",
     ]
