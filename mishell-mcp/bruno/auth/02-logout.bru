@@ -1,0 +1,22 @@
+meta {
+  name: logout
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/auth/logout
+  body: none
+  auth: none
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("response has ok=true", function() {
+    const body = res.getBody();
+    expect(body.ok).to.equal(true);
+  });
+}

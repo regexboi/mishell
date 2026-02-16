@@ -1,0 +1,34 @@
+meta {
+  name: stream validation error
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/v1/llm/stream
+  body: json
+  auth: none
+}
+
+headers {
+  x-api-key: {{apiKey}}
+  accept: text/event-stream
+  content-type: application/json
+}
+
+body:json {
+  {
+    "text": "hello from bruno"
+  }
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("sse error event is returned", function() {
+    const body = String(res.getBody());
+    expect(body).to.include("event: error");
+  });
+}

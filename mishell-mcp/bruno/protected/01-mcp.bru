@@ -1,0 +1,21 @@
+meta {
+  name: mcp endpoint
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/mcp
+  body: none
+  auth: none
+}
+
+headers {
+  x-api-key: {{apiKey}}
+}
+
+tests {
+  test("mcp is not unauthorized", function() {
+    expect(res.getStatus()).to.not.equal(401);
+  });
+}

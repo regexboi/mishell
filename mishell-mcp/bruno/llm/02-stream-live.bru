@@ -1,0 +1,35 @@
+meta {
+  name: stream live
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/v1/llm/stream
+  body: json
+  auth: none
+}
+
+headers {
+  x-api-key: {{apiKey}}
+  accept: text/event-stream
+  content-type: application/json
+}
+
+body:json {
+  {
+    "text": "Give me a one-line status update.",
+    "session_id": "{{sessionId}}"
+  }
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  
+  test("sse payload is present", function() {
+    const body = String(res.getBody());
+    expect(body).to.include("event:");
+  });
+}

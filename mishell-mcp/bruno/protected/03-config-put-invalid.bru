@@ -1,0 +1,33 @@
+meta {
+  name: config put invalid toml
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/config
+  body: json
+  auth: none
+}
+
+headers {
+  x-api-key: {{apiKey}}
+  content-type: application/json
+}
+
+body:json {
+  {
+    "not": "toml"
+  }
+}
+
+tests {
+  test("invalid payload is rejected", function() {
+    expect(res.getStatus()).to.equal(400);
+  });
+
+  test("response has ok=false", function() {
+    const body = res.getBody();
+    expect(body.ok).to.equal(false);
+  });
+}

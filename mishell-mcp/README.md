@@ -39,6 +39,8 @@ make run-http-dangerous
 make test
 ```
 
+Bruno API collection (one request per HTTP endpoint, with assertions) is available in `/Users/mishca/scripts/mishell/mishell-mcp/bruno`.
+
 Run the Docker-backed E2B template Playwright integration test (opt-in, slower):
 
 ```bash

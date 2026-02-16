@@ -1,0 +1,26 @@
+meta {
+  name: config get
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/config
+  body: none
+  auth: none
+}
+
+headers {
+  x-api-key: {{apiKey}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("response has ok=true", function() {
+    const body = res.getBody();
+    expect(body.ok).to.equal(true);
+  });
+}

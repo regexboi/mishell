@@ -1,0 +1,22 @@
+meta {
+  name: transcribe empty body
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/speech/transcribe
+  body: none
+  auth: none
+}
+
+headers {
+  x-api-key: {{apiKey}}
+  content-type: audio/wav
+}
+
+tests {
+  test("empty audio returns 400 (or 404 if speech disabled)", function() {
+    expect([400, 404]).to.include(res.getStatus());
+  });
+}
