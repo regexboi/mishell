@@ -14,14 +14,13 @@ UI_HTML = """<!doctype html>
       --muted: #cfc6ef;
       --ok: #79f2b1;
       --err: #ff9fb3;
-      --accent: #c79bff;
       --shadow: rgba(8, 4, 18, 0.45);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: "Manrope", "Segoe UI", sans-serif;
+      font-family: \"Manrope\", \"Segoe UI\", sans-serif;
       color: var(--txt);
       background:
         radial-gradient(1200px 700px at -10% -20%, #6f41bb55, transparent 55%),
@@ -50,6 +49,7 @@ UI_HTML = """<!doctype html>
       border-bottom: 1px solid var(--glass-border);
       display: flex;
       justify-content: space-between;
+      align-items: center;
       gap: 12px;
       flex-wrap: wrap;
     }
@@ -64,10 +64,31 @@ UI_HTML = """<!doctype html>
       border: 1px solid var(--glass-border);
       background: rgba(13, 7, 28, 0.56);
       color: var(--txt);
-      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: \"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: .86rem;
       line-height: 1.4;
       padding: 14px;
+      outline: none;
+    }
+    .auth-box {
+      display: grid;
+      gap: 10px;
+      max-width: 420px;
+      width: 100%;
+    }
+    .auth-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    input[type=\"password\"] {
+      flex: 1;
+      min-width: 220px;
+      border-radius: 999px;
+      border: 1px solid var(--glass-border);
+      background: rgba(13, 7, 28, 0.56);
+      color: var(--txt);
+      padding: 10px 14px;
       outline: none;
     }
     .actions { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -92,6 +113,7 @@ UI_HTML = """<!doctype html>
       white-space: pre-wrap;
       min-height: 50px;
     }
+    .hidden { display: none !important; }
     .ok { color: var(--ok); }
     .err { color: var(--err); }
   </style>
@@ -100,22 +122,42 @@ UI_HTML = """<!doctype html>
   <main class=\"card\">
     <div class=\"head\">
       <h1>Mishell MCP Config</h1>
-      <div class=\"meta\" id=\"meta\">Loading…</div>
+      <div class=\"meta\" id=\"meta\">Checking auth…</div>
     </div>
-    <div class=\"body\">
+
+    <div class=\"body\" id=\"authGate\">
+      <div class=\"auth-box\">
+        <div>Enter API key to unlock config + MCP HTTP endpoints.</div>
+        <div class=\"auth-row\">
+          <input id=\"apiKey\" type=\"password\" placeholder=\"MISHELL API key\" autocomplete=\"off\" />
+          <button id=\"login\">Unlock</button>
+        </div>
+      </div>
+      <div class=\"status\" id=\"authStatus\">Waiting for key.</div>
+    </div>
+
+    <div class=\"body hidden\" id=\"appBody\">
       <textarea id=\"toml\" spellcheck=\"false\"></textarea>
       <div class=\"actions\">
         <button id=\"refresh\">Refresh</button>
         <button id=\"save\">Save</button>
         <button id=\"reload\">Reload</button>
+        <button id=\"logout\">Lock</button>
       </div>
       <div class=\"status\" id=\"status\">Ready.</div>
     </div>
   </main>
+
   <script>
     const $ = (id) => document.getElementById(id);
-    const statusEl = $("status");
     const metaEl = $("meta");
+
+    const authGateEl = $("authGate");
+    const authStatusEl = $("authStatus");
+    const apiKeyEl = $("apiKey");
+
+    const appBodyEl = $("appBody");
+    const statusEl = $("status");
     const tomlEl = $("toml");
 
     function setStatus(text, kind) {
@@ -124,13 +166,53 @@ UI_HTML = """<!doctype html>
       if (kind) statusEl.classList.add(kind);
     }
 
+    function setAuthStatus(text, kind) {
+      authStatusEl.textContent = text;
+      authStatusEl.classList.remove("ok", "err");
+      if (kind) authStatusEl.classList.add(kind);
+    }
+
+    function lockUI(message) {
+      authGateEl.classList.remove("hidden");
+      appBodyEl.classList.add("hidden");
+      metaEl.textContent = "locked";
+      setAuthStatus(message || "Enter API key.", "err");
+    }
+
+    function unlockUI(source) {
+      authGateEl.classList.add("hidden");
+      appBodyEl.classList.remove("hidden");
+      const sourceText = source ? ` (${source})` : "";
+      metaEl.textContent = `authenticated${sourceText}`;
+    }
+
+    async function getJson(path, init) {
+      const res = await fetch(path, {
+        credentials: "same-origin",
+        ...init,
+      });
+
+      let data = { ok: false, error: `HTTP ${res.status}` };
+      try {
+        data = await res.json();
+      } catch (_) {
+        // Keep fallback parse result.
+      }
+
+      return { res, data };
+    }
+
     async function refreshConfig() {
-      const res = await fetch("/api/config");
-      const data = await res.json();
+      const { res, data } = await getJson("/api/config");
+      if (res.status === 401) {
+        lockUI("Session expired. Enter API key again.");
+        return;
+      }
       if (!data.ok) {
         setStatus(data.error || "Failed to load config", "err");
         return;
       }
+
       tomlEl.value = data.toml;
       metaEl.textContent = `policy_hash=${data.policy_hash} source=${data.source}`;
       const warning = data.warning ? `\nwarning=${data.warning}` : "";
@@ -138,35 +220,99 @@ UI_HTML = """<!doctype html>
     }
 
     async function saveConfig() {
-      const res = await fetch("/api/config", {
+      const { res, data } = await getJson("/api/config", {
         method: "PUT",
         headers: { "Content-Type": "text/plain" },
-        body: tomlEl.value
+        body: tomlEl.value,
       });
-      const data = await res.json();
+
+      if (res.status === 401) {
+        lockUI("Session expired. Enter API key again.");
+        return;
+      }
       if (!data.ok) {
         setStatus(data.error || "Save failed", "err");
         return;
       }
+
       setStatus("Saved config file. Click Reload to apply.", "ok");
     }
 
     async function reloadConfig() {
-      const res = await fetch("/api/reload", { method: "POST" });
-      const data = await res.json();
+      const { res, data } = await getJson("/api/reload", { method: "POST" });
+      if (res.status === 401) {
+        lockUI("Session expired. Enter API key again.");
+        return;
+      }
       if (!data.ok) {
         setStatus(data.error || "Reload failed", "err");
         return;
       }
+
       metaEl.textContent = `policy_hash=${data.policy_hash} source=${data.source}`;
       setStatus(`Reloaded. ${data.summary || ""}`.trim(), "ok");
       if (data.toml) tomlEl.value = data.toml;
     }
 
+    async function login() {
+      const apiKey = apiKeyEl.value.trim();
+      if (!apiKey) {
+        setAuthStatus("API key is required.", "err");
+        return;
+      }
+
+      const { data } = await getJson("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+
+      if (!data.ok) {
+        setAuthStatus(data.error || "Invalid API key.", "err");
+        return;
+      }
+
+      apiKeyEl.value = "";
+      unlockUI("session-cookie");
+      setStatus("Authenticated.", "ok");
+      await refreshConfig();
+    }
+
+    async function logout() {
+      await getJson("/api/auth/logout", { method: "POST" });
+      lockUI("Locked. Enter API key to continue.");
+    }
+
+    async function initAuth() {
+      const { data } = await getJson("/api/auth/status");
+      if (!data.ok) {
+        lockUI(data.error || "Auth check failed.");
+        return;
+      }
+
+      if (data.enabled === false || data.authenticated) {
+        unlockUI(data.source || null);
+        await refreshConfig();
+        return;
+      }
+
+      lockUI("Enter API key to unlock admin UI.");
+    }
+
+    $("login").addEventListener("click", login);
+    $("logout").addEventListener("click", logout);
     $("refresh").addEventListener("click", refreshConfig);
     $("save").addEventListener("click", saveConfig);
     $("reload").addEventListener("click", reloadConfig);
-    refreshConfig();
+
+    apiKeyEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        login();
+      }
+    });
+
+    initAuth();
   </script>
 </body>
 </html>

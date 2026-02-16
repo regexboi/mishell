@@ -28,6 +28,7 @@ allowed_commands = [
   "uv",
   "az",
   "ffmpeg",
+  "playwright*",
   "curl",
   "ps",
   "az",
@@ -65,6 +66,11 @@ http_port = 8067
 
 [ui]
 enabled = true
+
+[auth]
+enabled = true
+api_key_env = "MISHELL_API_KEY"
+session_ttl_s = 43200
 
 [e2b]
 # Template name or ID. Keep empty to use E2B default template.

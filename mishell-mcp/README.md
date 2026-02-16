@@ -64,11 +64,32 @@ allow_internet_access = true
 start_cwd = "/home/user"
 ```
 
+`allowed_commands` supports glob patterns for binary names (for example, `playwright*`).
+
 You can build a dedicated template using `e2b/template.toml` and `e2b/mishell.Dockerfile`:
 
 ```bash
 make e2b-template-build
 ```
+
+## API Key Auth (HTTP)
+
+HTTP mode is protected by API key auth, including `/mcp` and all `/api/*` routes (except auth bootstrap routes).
+
+Set key in `.env` (or your environment):
+
+```bash
+echo 'MISHELL_API_KEY=your-key' >> .env
+```
+
+Browser flow:
+- `GET /` is public and shows the login form.
+- Submit key to `POST /api/auth/login` to receive an auth session cookie.
+- Use `POST /api/auth/logout` to lock the UI.
+
+Non-browser clients can authenticate per request using either:
+- `x-api-key: your-key`
+- `Authorization: Bearer your-key`
 
 ## Speech-to-Text Setup (Whisper)
 
@@ -122,6 +143,9 @@ Response shape:
 ## Admin UI endpoints (HTTP mode)
 
 - `GET /` page
+- `GET /api/auth/status` auth/session status
+- `POST /api/auth/login` exchange API key for session cookie
+- `POST /api/auth/logout` clear auth session
 - `GET /api/config` read TOML + status
 - `PUT /api/config` save TOML (validate first)
 - `POST /api/reload` apply updated config

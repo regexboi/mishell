@@ -56,6 +56,12 @@ class SpeechConfig(BaseModel):
     request_timeout_s: int = Field(default=120, ge=1)
 
 
+class AuthConfig(BaseModel):
+    enabled: bool = True
+    api_key_env: str = "MISHELL_API_KEY"
+    session_ttl_s: int = Field(default=43_200, ge=60)
+
+
 class PolicyConfig(BaseModel):
     shell_path: str = DEFAULT_SHELL_PATH
     allowed_commands: list[str] = Field(default_factory=list)
@@ -64,6 +70,7 @@ class PolicyConfig(BaseModel):
     defaults: RuntimeDefaults = Field(default_factory=RuntimeDefaults)
     server: ServerConfig = Field(default_factory=ServerConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
     e2b: E2BConfig = Field(default_factory=E2BConfig)
     speech: SpeechConfig = Field(default_factory=SpeechConfig)
 
@@ -103,6 +110,7 @@ def sample_policy_dict() -> dict[str, Any]:
             "uv",
             "az",
             "ffmpeg",
+            "playwright*",
         ],
         "forbidden_command_rules": [
             {
@@ -135,6 +143,11 @@ def sample_policy_dict() -> dict[str, Any]:
             "http_port": DEFAULT_HTTP_PORT,
         },
         "ui": {"enabled": True},
+        "auth": {
+            "enabled": True,
+            "api_key_env": "MISHELL_API_KEY",
+            "session_ttl_s": 43200,
+        },
         "e2b": {
             "template": None,
             "timeout_s": 600,
@@ -161,7 +174,7 @@ def sample_policy_toml() -> str:
 shell_path = "/bin/bash"
 allowed_commands = [
   "ls", "cat", "grep", "rg", "find", "pwd", "cd", "echo", "head", "tail", "wc", "sed", "awk",
-  "git", "python", "python3", "pip", "pip3", "node", "npm", "pnpm", "yarn", "uv", "az", "ffmpeg"
+  "git", "python", "python3", "pip", "pip3", "node", "npm", "pnpm", "yarn", "uv", "az", "ffmpeg", "playwright*"
 ]
 forbidden_paths = ["*.env", "**/.env", "**/.env.*", "**/.ssh/**", "**/id_rsa", "**/id_ed25519"]
 
@@ -187,6 +200,11 @@ http_port = 8067
 
 [ui]
 enabled = true
+
+[auth]
+enabled = true
+api_key_env = "MISHELL_API_KEY"
+session_ttl_s = 43200
 
 [e2b]
 # Template name or ID. Keep empty to use E2B default template.

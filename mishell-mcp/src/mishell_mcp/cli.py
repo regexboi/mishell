@@ -51,11 +51,17 @@ def _load_env_file(path: Path) -> None:
 
 
 def _resolve_e2b_api_key(config_path: Path) -> str | None:
+    _load_dotenv_candidates(config_path)
+
     if os.getenv("E2B_API_KEY"):
         return os.getenv("E2B_API_KEY")
     if os.getenv("E2B_KEY"):
         return os.getenv("E2B_KEY")
 
+    return None
+
+
+def _load_dotenv_candidates(config_path: Path) -> None:
     candidates: list[Path] = []
     cwd_env = Path.cwd() / ".env"
     cfg_env = config_path.resolve().parent / ".env"
@@ -66,14 +72,14 @@ def _resolve_e2b_api_key(config_path: Path) -> str | None:
     for candidate in candidates:
         _load_env_file(candidate)
 
-    return os.getenv("E2B_API_KEY") or os.getenv("E2B_KEY")
-
 
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
     config_path = Path(args.config)
+    _load_dotenv_candidates(config_path)
+
     e2b_api_key = None
     if not args.dangerous:
         e2b_api_key = _resolve_e2b_api_key(config_path)
@@ -83,6 +89,7 @@ def main() -> None:
             config_path=config_path,
             dangerous=args.dangerous,
             e2b_api_key=e2b_api_key,
+            require_http_auth_key=args.mode == "serve-http",
         )
     except RuntimeError as exc:
         parser.error(str(exc))
@@ -92,7 +99,7 @@ def main() -> None:
     if args.mode == "serve-http":
         host = cfg.server.http_host
         port = args.port if args.port is not None else cfg.server.http_port
-        app.mcp.run(transport="http", host=host, port=port)
+        app.run_http(host=host, port=port)
         return
 
     if args.mode == "serve-stdio":
