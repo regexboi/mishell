@@ -132,6 +132,102 @@
                 android:textColor="@color/cyber_text_dim"
                 android:textSize="12sp" />
         </ScrollView>
+
+        <LinearLayout
+            android:id="@+id/squirt_container"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/diagnostic_header">
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/squirt_word_row"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <TextView
+                    android:id="@+id/squirt_left"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="start"
+                    android:fontFamily="monospace"
+                    android:gravity="end"
+                    android:maxLines="1"
+                    android:textColor="@color/cyber_text_dim"
+                    android:textSize="40sp"
+                    app:layout_constraintBaseline_toBaselineOf="@+id/squirt_anchor"
+                    app:layout_constraintEnd_toStartOf="@+id/squirt_anchor"
+                    app:layout_constraintStart_toStartOf="parent" />
+
+                <TextView
+                    android:id="@+id/squirt_anchor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/cyber_pink"
+                    android:textSize="40sp"
+                    android:textStyle="bold"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    tools:text="R" />
+
+                <TextView
+                    android:id="@+id/squirt_right"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="monospace"
+                    android:gravity="start"
+                    android:maxLines="1"
+                    android:textColor="@color/cyber_text_dim"
+                    android:textSize="40sp"
+                    app:layout_constraintBaseline_toBaselineOf="@+id/squirt_anchor"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toEndOf="@+id/squirt_anchor" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <LinearLayout
+                android:id="@+id/squirt_speed_controls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingTop="6dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/squirt_speed_down"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:text="-"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/squirt_speed_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="14dp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/cyber_cyan"
+                    android:textSize="16sp"
+                    tools:text="420 WPM" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/squirt_speed_up"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:text="+"
+                    android:textSize="18sp" />
+            </LinearLayout>
+        </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <LinearLayout

@@ -5,6 +5,7 @@
     <string name="tile_tasks">Tasks</string>
     <string name="tile_rover">Rover</string>
     <string name="diagnostic_title">TERMINAL / DIAGNOSTICS</string>
+    <string name="diagnostic_title_squirt">TERMINAL / SQUIRT MODE</string>
     <string name="mic_label">MIC</string>
     <string name="mic_idle">VOICE INPUT: IDLE</string>
     <string name="mic_listening">VOICE INPUT: LISTENING</string>
@@ -21,6 +22,7 @@ Tap MIC again to transcribe.</string>
     <string name="terminal_generating">USR://%1$s\n\nMISHELL://</string>
     <string name="terminal_empty_transcript">(No transcript returned)</string>
     <string name="terminal_error">ERR://%1$s</string>
+    <string name="squirt_speed_label">%1$d WPM</string>
     <string name="mishell_avatar">MISHELL</string>
     <string name="mishell_role">PURPLE WITCH AI</string>
     <string name="banner_text">// BOOT COMPLETE // MISHELL ONLINE // VOICE SHELL READY // CONNECTING STARLINK NODE //</string>
