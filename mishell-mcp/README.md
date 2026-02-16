@@ -125,6 +125,32 @@ Response shape:
 }
 ```
 
+## LLM Text Streaming (SSE)
+
+The HTTP server includes `POST /v1/llm/stream` for text delta streaming via PydanticAI using OpenAI `gpt-5-mini`.
+
+It uses `OPENAI_API_KEY` from your environment:
+
+```bash
+echo 'OPENAI_API_KEY=your-key' >> .env
+```
+
+Request body (both fields required):
+
+```json
+{
+  "text": "Write a haiku about shell scripting.",
+  "session_id": "android-client-a"
+}
+```
+
+Response is `text/event-stream` with SSE events:
+- `delta` with payload `{"text":"<chunk>"}`
+- `done` with payload `{}`
+- `error` with payload `{"message":"<error text>"}`
+
+This endpoint is intentionally text-only for a stable client parser contract. If tool/loop visibility is needed later, add a separate advanced endpoint using `run_stream_events()` (or `agent.iter()`), rather than changing this contract.
+
 ## MCP Tools
 
 - `shell_policy_get`
@@ -150,6 +176,7 @@ Response shape:
 - `PUT /api/config` save TOML (validate first)
 - `POST /api/reload` apply updated config
 - `POST /api/speech/transcribe` transcribe uploaded audio (`audio` multipart field; supports raw body too)
+- `POST /v1/llm/stream` stream text deltas over SSE
 
 ## Notes
 

@@ -14,6 +14,7 @@ from starlette.responses import HTMLResponse, JSONResponse
 
 from .auth import AUTH_COOKIE_NAME, ApiKeyAuthManager, ApiKeyHTTPMiddleware
 from .config import ConfigManager, PolicyConfig
+from .llm import register_llm_routes
 from .policy import PolicyEngine
 from .shell_session import SessionManager
 from .speech import register_speech_routes
@@ -316,6 +317,7 @@ class MishellApp:
             self.mcp,
             get_policy_config=self.state.config.get_config,
         )
+        register_llm_routes(self.mcp)
 
 
 def _policy_text(payload: dict[str, Any]) -> str:
