@@ -1,4 +1,27 @@
 <resources>
     <string name="app_name">mishell</string>
-    <string name="welcome_message">Welcome to mishell</string>
+    <string name="tile_home">Home</string>
+    <string name="tile_messages">Messages</string>
+    <string name="tile_tasks">Tasks</string>
+    <string name="tile_rover">Rover</string>
+    <string name="diagnostic_title">TERMINAL / DIAGNOSTICS</string>
+    <string name="mic_label">MIC</string>
+    <string name="mic_idle">VOICE INPUT: IDLE</string>
+    <string name="mic_listening">VOICE INPUT: LISTENING</string>
+    <string name="mic_transcribing">VOICE INPUT: TRANSCRIBING</string>
+    <string name="mic_permission_required">Microphone permission is required.</string>
+    <string name="mic_start_failed">Could not start recording: %1$s</string>
+    <string name="mic_recording_too_short">Recording too short. Please try again.</string>
+    <string name="terminal_waiting">SYS://ready
+Tap MIC to start voice input.</string>
+    <string name="terminal_recording">SYS://recording
+Tap MIC again to transcribe.</string>
+    <string name="terminal_transcribing">SYS://transcribing audio...</string>
+    <string name="terminal_empty_transcript">(No transcript returned)</string>
+    <string name="terminal_error">ERR://%1$s</string>
+    <string name="mishell_avatar">MISHELL</string>
+    <string name="mishell_role">PURPLE WITCH AI</string>
+    <string name="banner_text">// BOOT COMPLETE // MISHELL ONLINE // VOICE SHELL READY // CONNECTING STARLINK NODE //</string>
+    <string name="placeholder_label">Placeholder %1$d</string>
+    <string name="placeholder_back">Back</string>
 </resources>
