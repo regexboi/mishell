@@ -5,7 +5,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.os.Bundle
+import android.transition.AutoTransition
+import android.transition.TransitionManager
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
+import android.view.animation.DecelerateInterpolator
+import androidx.activity.OnBackPressedCallback
+import androidx.constraintlayout.widget.ConstraintSet
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -49,6 +56,9 @@ class MainActivity : AppCompatActivity() {
     private var activeWorkJob: Job? = null
     private var activeSttCall: Call? = null
     private var activeLlmCall: Call? = null
+    private var isTerminalFullscreen = false
+    private val defaultConstraints = ConstraintSet()
+    private val fullscreenConstraints = ConstraintSet()
 
     private val audioPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -67,7 +77,19 @@ class MainActivity : AppCompatActivity() {
 
         enableImmersiveMode()
         setupTiles()
+        setupTerminalFullscreenToggle()
         setupMicButton()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (isTerminalFullscreen) {
+                    setTerminalFullscreen(false)
+                    return
+                }
+
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
+        })
 
         binding.bottomBanner.isSelected = true
     }
@@ -98,13 +120,92 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupMicButton() {
-        binding.micButton.setOnClickListener {
+        val onMicClick = View.OnClickListener {
             when {
                 isBusy -> Unit
                 isRecording -> stopRecordingAndTranscribe()
                 else -> ensureAudioPermissionAndStart()
             }
         }
+        binding.micButton.setOnClickListener(onMicClick)
+    }
+
+    private fun setupTerminalFullscreenToggle() {
+        defaultConstraints.clone(binding.root)
+        fullscreenConstraints.clone(binding.root)
+        fullscreenConstraints.connect(
+            binding.diagnosticPanel.id,
+            ConstraintSet.START,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.START
+        )
+        fullscreenConstraints.connect(
+            binding.diagnosticPanel.id,
+            ConstraintSet.END,
+            binding.guideCenterEnd.id,
+            ConstraintSet.START
+        )
+        fullscreenConstraints.connect(
+            binding.diagnosticPanel.id,
+            ConstraintSet.TOP,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.TOP
+        )
+        fullscreenConstraints.connect(
+            binding.diagnosticPanel.id,
+            ConstraintSet.BOTTOM,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.BOTTOM
+        )
+        fullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.START, 0)
+        fullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.END, 12)
+        fullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.TOP, 0)
+        fullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.BOTTOM, 0)
+
+        val tapDetector = GestureDetector(
+            this,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onSingleTapUp(e: MotionEvent): Boolean {
+                    toggleTerminalFullscreen()
+                    return true
+                }
+            }
+        )
+        binding.terminalScroll.setOnTouchListener { _, event ->
+            tapDetector.onTouchEvent(event)
+            false
+        }
+        binding.diagnosticHeader.setOnClickListener { toggleTerminalFullscreen() }
+    }
+
+    private fun toggleTerminalFullscreen() {
+        setTerminalFullscreen(!isTerminalFullscreen)
+    }
+
+    private fun setTerminalFullscreen(fullscreen: Boolean) {
+        if (isTerminalFullscreen == fullscreen) {
+            return
+        }
+        isTerminalFullscreen = fullscreen
+        TransitionManager.beginDelayedTransition(
+            binding.root,
+            AutoTransition().apply {
+                duration = 320L
+                interpolator = DecelerateInterpolator(1.6f)
+            }
+        )
+
+        if (fullscreen) {
+            fullscreenConstraints.applyTo(binding.root)
+            binding.iconGrid.visibility = View.GONE
+            binding.bottomBanner.visibility = View.GONE
+        } else {
+            defaultConstraints.applyTo(binding.root)
+            binding.iconGrid.visibility = View.VISIBLE
+            binding.bottomBanner.visibility = View.VISIBLE
+        }
+
+        scrollTerminalToBottom()
     }
 
     private fun ensureAudioPermissionAndStart() {
@@ -135,7 +236,7 @@ class MainActivity : AppCompatActivity() {
             mediaRecorder = recorder
             recordingFile = outputFile
             isRecording = true
-            binding.micButton.isSelected = true
+            setMicButtonSelected(true)
             binding.micStatus.text = getString(R.string.mic_listening)
             binding.terminalOutput.text = getString(R.string.terminal_recording)
         } catch (error: Exception) {
@@ -170,7 +271,7 @@ class MainActivity : AppCompatActivity() {
     private fun uploadRecording(file: File) {
         cancelActiveWork()
         isBusy = true
-        binding.micButton.isEnabled = false
+        setMicButtonEnabled(false)
         binding.micStatus.text = getString(R.string.mic_transcribing)
         binding.terminalOutput.text = getString(R.string.terminal_transcribing)
 
@@ -228,7 +329,7 @@ class MainActivity : AppCompatActivity() {
 
                 withContext(NonCancellable + Dispatchers.Main.immediate) {
                     isBusy = false
-                    binding.micButton.isEnabled = true
+                    setMicButtonEnabled(true)
                     binding.micStatus.text = getString(R.string.mic_idle)
 
                     if (errorMessage != null) {
@@ -305,8 +406,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun resetIdleMicState() {
         isRecording = false
-        binding.micButton.isSelected = false
+        setMicButtonSelected(false)
         binding.micStatus.text = getString(R.string.mic_idle)
+    }
+
+    private fun setMicButtonEnabled(enabled: Boolean) {
+        binding.micButton.isEnabled = enabled
+    }
+
+    private fun setMicButtonSelected(selected: Boolean) {
+        binding.micButton.isSelected = selected
     }
 
     private fun showTerminalError(message: String) {
