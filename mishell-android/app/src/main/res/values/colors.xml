@@ -1,0 +1,13 @@
+<resources>
+    <color name="cyber_bg_start">#000000</color>
+    <color name="cyber_bg_mid">#010001</color>
+    <color name="cyber_bg_end">#000000</color>
+    <color name="cyber_panel">#99000000</color>
+    <color name="cyber_panel_deep">#CC000000</color>
+    <color name="cyber_pink">#FF47DE</color>
+    <color name="cyber_pink_soft">#B3FF47DE</color>
+    <color name="cyber_purple">#AA7CFF</color>
+    <color name="cyber_cyan">#57F2FF</color>
+    <color name="cyber_text">#FFE3FF</color>
+    <color name="cyber_text_dim">#A9C9E8</color>
+</resources>

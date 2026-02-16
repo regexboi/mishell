@@ -1,7 +1,40 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.Mishell" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.Mishell" parent="Theme.Material3.Dark.NoActionBar">
         <item name="android:fontFamily">@font/geist_pixel</item>
         <item name="fontFamily">@font/geist_pixel</item>
         <item name="android:statusBarColor" tools:targetApi="l">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@drawable/bg_dashboard</item>
+    </style>
+
+    <style name="NeonTile">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:layout_gravity">fill</item>
+        <item name="android:layout_columnWeight">1</item>
+        <item name="android:layout_rowWeight">1</item>
+        <item name="android:background">@drawable/card_neon_selector</item>
+        <item name="android:gravity">center</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:minWidth">140dp</item>
+        <item name="android:minHeight">110dp</item>
+        <item name="android:padding">12dp</item>
+    </style>
+
+    <style name="NeonTileLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:textColor">@color/cyber_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="NeonDataLine">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">@color/cyber_text_dim</item>
+        <item name="android:textSize">11sp</item>
     </style>
 </resources>
