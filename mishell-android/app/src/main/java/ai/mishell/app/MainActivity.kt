@@ -5,13 +5,24 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.os.Bundle
+import android.view.View
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.activity.result.contract.ActivityResultContracts
 import ai.mishell.app.databinding.ActivityMainBinding
+import ai.mishell.app.network.LlmStreamClient
+import ai.mishell.app.network.SseEvent
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -20,19 +31,24 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
     companion object {
         private const val STT_URL = "https://mishell.mishcaslab.com/api/speech/transcribe"
-        private const val STT_API_KEY = "REDACTED_REMOVED"
     }
 
     private lateinit var binding: ActivityMainBinding
     private var isRecording = false
-    private var isUploading = false
+    private var isBusy = false
     private var mediaRecorder: MediaRecorder? = null
     private var recordingFile: File? = null
     private val httpClient = OkHttpClient()
+    private val llmStreamClient = LlmStreamClient(httpClient)
+    private val sessionId = UUID.randomUUID().toString()
+    private var activeWorkJob: Job? = null
+    private var activeSttCall: Call? = null
+    private var activeLlmCall: Call? = null
 
     private val audioPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -84,7 +100,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupMicButton() {
         binding.micButton.setOnClickListener {
             when {
-                isUploading -> Unit
+                isBusy -> Unit
                 isRecording -> stopRecordingAndTranscribe()
                 else -> ensureAudioPermissionAndStart()
             }
@@ -152,58 +168,108 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun uploadRecording(file: File) {
-        isUploading = true
+        cancelActiveWork()
+        isBusy = true
         binding.micButton.isEnabled = false
         binding.micStatus.text = getString(R.string.mic_transcribing)
         binding.terminalOutput.text = getString(R.string.terminal_transcribing)
 
-        Thread {
+        activeWorkJob = lifecycleScope.launch {
             var transcript = ""
+            var assistantText = ""
             var errorMessage: String? = null
             try {
-                val requestBody = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addFormDataPart(
-                        "audio",
-                        file.name,
-                        file.asRequestBody("audio/mp4".toMediaType())
-                    )
-                    .addFormDataPart("language", "en")
-                    .addFormDataPart("model", "whisper-1")
-                    .build()
-
-                val request = Request.Builder()
-                    .url(STT_URL)
-                    .addHeader("x-api-key", STT_API_KEY)
-                    .post(requestBody)
-                    .build()
-
-                httpClient.newCall(request).execute().use { response ->
-                    val body = response.body?.string().orEmpty()
-                    if (!response.isSuccessful) {
-                        throw IOException("HTTP ${response.code}: ${body.take(300)}")
-                    }
-                    transcript = extractTranscript(body)
+                transcript = withContext(Dispatchers.IO) {
+                    transcribeRecording(file)
                 }
+
+                if (transcript.isBlank()) {
+                    withContext(Dispatchers.Main.immediate) {
+                        binding.terminalOutput.text = getString(R.string.terminal_empty_transcript)
+                    }
+                    return@launch
+                }
+
+                withContext(Dispatchers.Main.immediate) {
+                    binding.micStatus.text = getString(R.string.mic_generating)
+                    binding.terminalOutput.text = getString(R.string.terminal_generating, transcript)
+                    scrollTerminalToBottom()
+                }
+
+                withContext(Dispatchers.IO) {
+                    llmStreamClient.streamText(
+                        url = BuildConfig.LLM_STREAM_URL,
+                        apiKey = BuildConfig.STT_API_KEY,
+                        text = transcript,
+                        sessionId = sessionId,
+                        onCallLifecycle = { call -> activeLlmCall = call },
+                    ) { event ->
+                        when (event) {
+                            is SseEvent.Delta -> {
+                                assistantText += event.text
+                                runOnUiThread {
+                                    renderTranscriptAndAssistant(transcript, assistantText)
+                                }
+                            }
+                            SseEvent.Done -> Unit
+                            is SseEvent.Error -> throw IOException(event.message)
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
-                errorMessage = error.message ?: "transcription failed"
+                errorMessage = error.message ?: "request failed"
             } finally {
                 file.delete()
                 recordingFile = null
-            }
+                activeSttCall = null
+                activeLlmCall = null
 
-            runOnUiThread {
-                isUploading = false
-                binding.micButton.isEnabled = true
-                binding.micStatus.text = getString(R.string.mic_idle)
+                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                    isBusy = false
+                    binding.micButton.isEnabled = true
+                    binding.micStatus.text = getString(R.string.mic_idle)
 
-                binding.terminalOutput.text = if (errorMessage != null) {
-                    getString(R.string.terminal_error, errorMessage)
-                } else {
-                    transcript.ifBlank { getString(R.string.terminal_empty_transcript) }
+                    if (errorMessage != null) {
+                        showTerminalError(errorMessage ?: "request failed")
+                    } else if (transcript.isNotBlank() && assistantText.isBlank()) {
+                        renderTranscriptAndAssistant(transcript, "")
+                    }
                 }
+
+                activeWorkJob = null
             }
-        }.start()
+        }
+    }
+
+    private fun transcribeRecording(file: File): String {
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "audio",
+                file.name,
+                file.asRequestBody("audio/mp4".toMediaType())
+            )
+            .addFormDataPart("language", "en")
+            .addFormDataPart("model", "whisper-1")
+            .build()
+
+        val request = Request.Builder()
+            .url(STT_URL)
+            .addHeader("x-api-key", BuildConfig.STT_API_KEY)
+            .post(requestBody)
+            .build()
+
+        val call = httpClient.newCall(request)
+        activeSttCall = call
+        call.execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw IOException("HTTP ${response.code}: ${body.take(300)}")
+            }
+            return extractTranscript(body)
+        }
     }
 
     private fun extractTranscript(responseBody: String): String {
@@ -245,6 +311,32 @@ class MainActivity : AppCompatActivity() {
 
     private fun showTerminalError(message: String) {
         binding.terminalOutput.text = getString(R.string.terminal_error, message)
+        scrollTerminalToBottom()
+    }
+
+    private fun renderTranscriptAndAssistant(transcript: String, assistantText: String) {
+        binding.terminalOutput.text = buildString {
+            append("USR://")
+            append(transcript)
+            append("\n\nMISHELL://")
+            append(assistantText)
+        }
+        scrollTerminalToBottom()
+    }
+
+    private fun scrollTerminalToBottom() {
+        binding.terminalScroll.post {
+            binding.terminalScroll.fullScroll(View.FOCUS_DOWN)
+        }
+    }
+
+    private fun cancelActiveWork() {
+        activeWorkJob?.cancel()
+        activeSttCall?.cancel()
+        activeLlmCall?.cancel()
+        activeWorkJob = null
+        activeSttCall = null
+        activeLlmCall = null
     }
 
     private fun enableImmersiveMode() {
@@ -257,6 +349,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        cancelActiveWork()
         if (isRecording) {
             runCatching { mediaRecorder?.stop() }
         }

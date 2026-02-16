@@ -9,6 +9,7 @@
     <string name="mic_idle">VOICE INPUT: IDLE</string>
     <string name="mic_listening">VOICE INPUT: LISTENING</string>
     <string name="mic_transcribing">VOICE INPUT: TRANSCRIBING</string>
+    <string name="mic_generating">VOICE INPUT: GENERATING</string>
     <string name="mic_permission_required">Microphone permission is required.</string>
     <string name="mic_start_failed">Could not start recording: %1$s</string>
     <string name="mic_recording_too_short">Recording too short. Please try again.</string>
@@ -17,6 +18,7 @@ Tap MIC to start voice input.</string>
     <string name="terminal_recording">SYS://recording
 Tap MIC again to transcribe.</string>
     <string name="terminal_transcribing">SYS://transcribing audio...</string>
+    <string name="terminal_generating">USR://%1$s\n\nMISHELL://</string>
     <string name="terminal_empty_transcript">(No transcript returned)</string>
     <string name="terminal_error">ERR://%1$s</string>
     <string name="mishell_avatar">MISHELL</string>
