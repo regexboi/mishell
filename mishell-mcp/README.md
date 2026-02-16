@@ -39,6 +39,12 @@ make run-http-dangerous
 make test
 ```
 
+Run the Docker-backed E2B template Playwright integration test (opt-in, slower):
+
+```bash
+RUN_E2B_TEMPLATE_TESTS=1 uv run pytest -q tests/test_e2b_template_playwright.py
+```
+
 ## E2B Setup
 
 Mishell reads `E2B_API_KEY` first, then `E2B_KEY` (including from local `.env`).
@@ -64,6 +70,40 @@ You can build a dedicated template using `e2b/template.toml` and `e2b/mishell.Do
 make e2b-template-build
 ```
 
+## Speech-to-Text Setup (Whisper)
+
+The HTTP server includes `POST /api/speech/transcribe` for audio transcription via OpenAI.
+
+Set your key (or change `speech.api_key_env` in `mishell.toml`):
+
+```bash
+echo 'OPENAI_API_KEY=your-key' >> .env
+```
+
+Example request:
+
+```bash
+curl -sS -X POST \
+  -F "audio=@/path/to/audio.m4a" \
+  -F "language=en" \
+  http://127.0.0.1:8067/api/speech/transcribe
+```
+
+Response shape:
+
+```json
+{
+  "ok": true,
+  "text": "transcribed text here",
+  "model": "whisper-1",
+  "audio": {
+    "filename": "audio.m4a",
+    "content_type": "audio/mp4",
+    "bytes": 12345
+  }
+}
+```
+
 ## MCP Tools
 
 - `shell_policy_get`
@@ -85,6 +125,7 @@ make e2b-template-build
 - `GET /api/config` read TOML + status
 - `PUT /api/config` save TOML (validate first)
 - `POST /api/reload` apply updated config
+- `POST /api/speech/transcribe` transcribe uploaded audio (`audio` multipart field; supports raw body too)
 
 ## Notes
 

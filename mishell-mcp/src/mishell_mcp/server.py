@@ -13,6 +13,7 @@ from starlette.responses import HTMLResponse, JSONResponse
 from .config import ConfigManager, PolicyConfig
 from .policy import PolicyEngine
 from .shell_session import SessionManager
+from .speech import register_speech_routes
 from .toon_utils import encode_toon
 from .ui import UI_HTML
 
@@ -74,6 +75,7 @@ class MishellApp:
                 "forbidden_paths": cfg.forbidden_paths,
                 "defaults": cfg.defaults.model_dump(),
                 "e2b": cfg.e2b.model_dump(),
+                "speech": cfg.speech.model_dump(),
             }
             return {
                 "txt": _policy_text(payload),
@@ -196,6 +198,11 @@ class MishellApp:
                 )
             except Exception as exc:  # noqa: BLE001
                 return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+        register_speech_routes(
+            self.mcp,
+            get_policy_config=self.state.config.get_config,
+        )
 
 
 def _policy_text(payload: dict[str, Any]) -> str:

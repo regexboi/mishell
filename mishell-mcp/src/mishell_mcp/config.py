@@ -46,6 +46,16 @@ class E2BConfig(BaseModel):
     start_cwd: str = "/home/user"
 
 
+class SpeechConfig(BaseModel):
+    enabled: bool = True
+    provider: str = "openai"
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "whisper-1"
+    api_key_env: str = "OPENAI_API_KEY"
+    max_audio_bytes: int = Field(default=25_000_000, ge=1)
+    request_timeout_s: int = Field(default=120, ge=1)
+
+
 class PolicyConfig(BaseModel):
     shell_path: str = DEFAULT_SHELL_PATH
     allowed_commands: list[str] = Field(default_factory=list)
@@ -55,6 +65,7 @@ class PolicyConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
     e2b: E2BConfig = Field(default_factory=E2BConfig)
+    speech: SpeechConfig = Field(default_factory=SpeechConfig)
 
 
 @dataclass
@@ -131,6 +142,15 @@ def sample_policy_dict() -> dict[str, Any]:
             "allow_internet_access": True,
             "start_cwd": "/home/user",
         },
+        "speech": {
+            "enabled": True,
+            "provider": "openai",
+            "base_url": "https://api.openai.com/v1",
+            "model": "whisper-1",
+            "api_key_env": "OPENAI_API_KEY",
+            "max_audio_bytes": 25000000,
+            "request_timeout_s": 120,
+        },
     }
 
 
@@ -175,6 +195,15 @@ timeout_s = 600
 secure = true
 allow_internet_access = true
 start_cwd = "/home/user"
+
+[speech]
+enabled = true
+provider = "openai"
+base_url = "https://api.openai.com/v1"
+model = "whisper-1"
+api_key_env = "OPENAI_API_KEY"
+max_audio_bytes = 25000000
+request_timeout_s = 120
 """
 
 

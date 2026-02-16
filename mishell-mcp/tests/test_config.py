@@ -15,6 +15,7 @@ def test_missing_config_uses_sample_defaults(tmp_path: Path) -> None:
 
     assert status.source == "sample-defaults"
     assert cfg.server.http_port == 8067
+    assert cfg.speech.model == "whisper-1"
     assert "ls" in cfg.allowed_commands
 
 

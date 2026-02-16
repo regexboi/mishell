@@ -73,3 +73,12 @@ timeout_s = 600
 secure = true
 allow_internet_access = true
 start_cwd = "/home/user"
+
+[speech]
+enabled = true
+provider = "openai"
+base_url = "https://api.openai.com/v1"
+model = "whisper-1"
+api_key_env = "OPENAI_API_KEY"
+max_audio_bytes = 25000000
+request_timeout_s = 120
