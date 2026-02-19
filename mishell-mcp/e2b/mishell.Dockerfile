@@ -24,6 +24,5 @@ RUN npm install -g @playwright/cli playwright \
   && playwright-cli --version \
   && playwright install-deps chromium
 
-RUN useradd -m user
 USER user
 WORKDIR /home/user

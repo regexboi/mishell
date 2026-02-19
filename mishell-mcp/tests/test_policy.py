@@ -55,3 +55,21 @@ def test_policy_blocks_cd_into_forbidden_path() -> None:
     result = engine.evaluate("cd ~/.ssh && ls", cwd="/tmp/project")
     assert not result.ok
     assert result.code == "PATH_BLOCKED"
+
+
+def test_policy_allows_globbed_allowed_command() -> None:
+    cfg = build_config()
+    cfg.allowed_commands.append("playwright*")
+    engine = PolicyEngine(cfg)
+    result = engine.evaluate("playwright-cli --version", cwd="/tmp")
+    assert result.ok
+    assert result.code == "OK"
+
+
+def test_policy_glob_does_not_allow_non_matching_command() -> None:
+    cfg = build_config()
+    cfg.allowed_commands = ["playwright*"]
+    engine = PolicyEngine(cfg)
+    result = engine.evaluate("python3 -V", cwd="/tmp")
+    assert not result.ok
+    assert result.code == "CMD_NOT_ALLOWED"

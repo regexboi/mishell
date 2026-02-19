@@ -74,7 +74,7 @@ session_ttl_s = 43200
 
 [e2b]
 # Template name or ID. Keep empty to use E2B default template.
-template = ""
+template = "p3wc3e7iyvxwda1yr9om"
 timeout_s = 600
 secure = true
 allow_internet_access = true

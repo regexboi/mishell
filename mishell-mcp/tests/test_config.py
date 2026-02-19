@@ -17,6 +17,7 @@ def test_missing_config_uses_sample_defaults(tmp_path: Path) -> None:
     assert cfg.server.http_port == 8067
     assert cfg.speech.model == "whisper-1"
     assert "ls" in cfg.allowed_commands
+    assert "playwright*" in cfg.allowed_commands
 
 
 def test_reload_from_disk_validates_and_applies(tmp_path: Path) -> None:

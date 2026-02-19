@@ -64,7 +64,8 @@ class PolicyDecision:
 class PolicyEngine:
     def __init__(self, config: PolicyConfig):
         self.config = config
-        self.allowed_commands = set(config.allowed_commands)
+        self.allowed_commands = {cmd for cmd in config.allowed_commands if not _has_glob_chars(cmd)}
+        self.allowed_command_globs = [cmd for cmd in config.allowed_commands if _has_glob_chars(cmd)]
 
     def evaluate(self, command: str, cwd: str) -> PolicyDecision:
         if len(command) > self.config.defaults.max_command_chars:
@@ -84,7 +85,7 @@ class PolicyEngine:
 
         for invocation in invocations:
             binary = invocation.binary
-            if binary not in self.allowed_commands:
+            if not self._is_command_allowed(binary):
                 return PolicyDecision(
                     ok=False,
                     code="CMD_NOT_ALLOWED",
@@ -120,6 +121,11 @@ class PolicyEngine:
             commands=invocations,
             paths_checked=path_candidates,
         )
+
+    def _is_command_allowed(self, binary: str) -> bool:
+        if binary in self.allowed_commands:
+            return True
+        return any(fnmatch.fnmatch(binary, pattern) for pattern in self.allowed_command_globs)
 
 
 def extract_invocations_and_paths(command: str) -> tuple[list[CommandInvocation], list[str]]:
@@ -332,6 +338,10 @@ def _strip_quotes(text: str) -> str:
         return text[1:-1]
     return text
 
+
+
+def _has_glob_chars(text: str) -> bool:
+    return any(ch in text for ch in ("*", "?", "[", "]"))
 
 
 def _dedupe(values: list[str]) -> list[str]:
