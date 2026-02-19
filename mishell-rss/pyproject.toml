@@ -1,0 +1,42 @@
+[project]
+name = "mishell-rss"
+version = "0.1.0"
+description = "RSS aggregator + watch-friendly summarization service"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "apscheduler>=3.10.4",
+  "beautifulsoup4>=4.12.3",
+  "fastapi>=0.115.8",
+  "feedparser>=6.0.11",
+  "httpx>=0.28.1",
+  "openai>=1.63.0",
+  "psycopg[binary]>=3.2.5",
+  "pydantic-settings>=2.7.1",
+  "sqlalchemy>=2.0.38",
+  "uvicorn[standard]>=0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.4",
+  "ruff>=0.9.6",
+]
+
+[project.scripts]
+mishell-rss-api = "mishell_rss.main:run"
+mishell-rss-ingest = "mishell_rss.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mishell_rss"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
