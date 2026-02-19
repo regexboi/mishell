@@ -1,0 +1,147 @@
+{
+  "props": {
+    "pageProps": {
+      "__APOLLO_STATE__": {
+        "ROOT_QUERY": {
+          "searchResultsPageByUrl:/b-cars-trucks/c174l1700273": {
+            "__typename": "SearchResultsPage",
+            "controls": {
+              "filtering": [
+                {
+                  "name": "transmission",
+                  "label": "Transmission",
+                  "shouldShowTopLevelAccordion": false,
+                  "quickFilterSortOrder": 40,
+                  "filters": [
+                    {
+                      "name": "cartransmission",
+                      "type": "MULTI_SELECT",
+                      "label": "Transmission",
+                      "parentName": null,
+                      "values": [
+                        {
+                          "label": "Manual",
+                          "value": "1",
+                          "totalResults": 22,
+                          "parentValue": null,
+                          "seoUrl": null
+                        },
+                        {
+                          "label": "Automatic",
+                          "value": "2",
+                          "totalResults": 90,
+                          "parentValue": null,
+                          "seoUrl": null
+                        }
+                      ],
+                      "selectedValues": null
+                    }
+                  ]
+                },
+                {
+                  "name": "priceSection",
+                  "label": "Price",
+                  "shouldShowTopLevelAccordion": false,
+                  "quickFilterSortOrder": null,
+                  "filters": [
+                    {
+                      "name": "price",
+                      "type": "RANGE",
+                      "label": "Price",
+                      "parentName": null,
+                      "fromRange": {"min": 0, "max": 999999999},
+                      "toRange": {"min": 0, "max": 999999999},
+                      "selectedRangeValues": null
+                    }
+                  ]
+                }
+              ],
+              "sorting": [
+                {
+                  "by": "DATE",
+                  "direction": "DESC",
+                  "label": "Most recent",
+                  "isSelected": true
+                }
+              ]
+            },
+            "pagination": {
+              "offset": 0,
+              "limit": 40,
+              "totalCount": 2
+            },
+            "searchQuery": {
+              "keywords": "",
+              "canonicalUrl": "https://www.kijiji.ca/b-cars-trucks/city-of-toronto/c174l1700273",
+              "filters": []
+            },
+            "results": {
+              "topListings": [],
+              "mainListings({\"pagination\":{\"limit\":40,\"offset\":0}})": [
+                {"__ref": "AutosListing:1"},
+                {"__ref": "AutosListing:2"}
+              ]
+            }
+          }
+        },
+        "AutosListing:1": {
+          "id": "1",
+          "title": "Manual Mazda 3",
+          "description": "Great manual hatch",
+          "url": "https://www.kijiji.ca/v-cars-trucks/x/1",
+          "sortingDate": "2026-02-15T00:00:00.000Z",
+          "imageUrls": ["https://media.kijiji.ca/api/v1/a.jpg?rule=kijijica-200-jpg"],
+          "location": {
+            "id": 1700273,
+            "name": "City of Toronto",
+            "coordinates": {"latitude": 43.6532, "longitude": -79.3832}
+          },
+          "price": {"amount": 1250000, "currency": "CAD"},
+          "attributes": {
+            "all": [
+              {
+                "canonicalName": "cartransmission",
+                "name": "Transmission",
+                "canonicalValues": ["1"],
+                "values": ["Manual"]
+              },
+              {
+                "canonicalName": "drivetrain",
+                "name": "Drivetrain",
+                "canonicalValues": ["rwd"],
+                "values": ["Rear-wheel drive (RWD)"]
+              }
+            ]
+          }
+        },
+        "AutosListing:2": {
+          "id": "2",
+          "title": "Automatic Civic",
+          "description": "Very clean automatic",
+          "url": "https://www.kijiji.ca/v-cars-trucks/x/2",
+          "sortingDate": "2026-02-15T00:01:00.000Z",
+          "imageUrls": [
+            "https://media.kijiji.ca/api/v1/b.jpg?rule=kijijica-200-jpg",
+            "https://media.kijiji.ca/api/v1/c.jpg?rule=kijijica-200-jpg"
+          ],
+          "location": {
+            "id": 1700273,
+            "name": "City of Toronto",
+            "coordinates": {"latitude": 43.70, "longitude": -79.40}
+          },
+          "price": {"amount": 1750000, "currency": "CAD"},
+          "attributes": {
+            "all": [
+              {
+                "canonicalName": "cartransmission",
+                "name": "Transmission",
+                "canonicalValues": ["2"],
+                "values": ["Automatic"]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

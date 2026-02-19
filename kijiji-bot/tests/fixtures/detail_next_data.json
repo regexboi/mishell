@@ -1,0 +1,48 @@
+{
+  "props": {
+    "pageProps": {
+      "__APOLLO_STATE__": {
+        "ROOT_QUERY": {
+          "listing({\"id\":\"1\",\"isExternalId\":false,\"trackView\":true})": {
+            "__ref": "AutosListing:1"
+          }
+        },
+        "AutosListing:1": {
+          "id": "1",
+          "title": "Manual Mazda 3",
+          "description": "<p>Great car</p>",
+          "url": "https://www.kijiji.ca/v-cars-trucks/x/1",
+          "categoryId": 174,
+          "imageUrls": [
+            "https://media.kijiji.ca/api/v1/a.jpg?rule=kijijica-640-webp",
+            "https://media.kijiji.ca/api/v1/b.jpg?rule=kijijica-640-webp"
+          ],
+          "location": {
+            "id": 1700273,
+            "name": "City of Toronto",
+            "address": "Toronto, ON",
+            "coordinates": {"latitude": 43.6532, "longitude": -79.3832}
+          },
+          "price": {"amount": 1250000, "currency": "CAD"},
+          "posterInfo": {"posterId": "COMMERCIAL_1", "rating": 4.7},
+          "attributes": {
+            "all": [
+              {
+                "canonicalName": "cartransmission",
+                "name": "Transmission",
+                "canonicalValues": ["1"],
+                "values": ["Manual"]
+              },
+              {
+                "canonicalName": "caryear",
+                "name": "Year",
+                "canonicalValues": ["2017"],
+                "values": ["2017"]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
