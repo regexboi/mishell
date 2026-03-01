@@ -61,6 +61,7 @@ class MainActivity : AppCompatActivity() {
         private const val SQUIRT_RAMP_FLOOR_MULTIPLIER = 0.45f
         private const val SQUIRT_BASE_TEXT_SIZE_SP = 40f
         private const val MAX_STREAM_DETAIL_LINES = 120
+        private const val MAX_TERMINAL_STREAM_BLOCKS = 160
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -100,6 +101,18 @@ class MainActivity : AppCompatActivity() {
     private val tmpViewLocation = IntArray(2)
     private val streamDetailsLock = Any()
     private val streamDetailLines = ArrayDeque<String>()
+    private val terminalStreamLock = Any()
+    private val terminalStreamBlocks = ArrayDeque<TerminalStreamBlock>()
+
+    private enum class TerminalStreamBlockType {
+        ASSISTANT,
+        DETAIL
+    }
+
+    private data class TerminalStreamBlock(
+        val type: TerminalStreamBlockType,
+        val text: StringBuilder
+    )
 
     private val audioPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -656,6 +669,7 @@ class MainActivity : AppCompatActivity() {
             thinkingLevel = "high",
             onCallLifecycle = { handle -> activeClawdiaStream = handle },
             onEvent = { event ->
+                Log.d(LOG_TAG, "Clawdia event=$event")
                 when (event) {
                     is ClawdiaGatewayClient.StreamEvent.Status -> {
                         appendStreamDetailAndRender(transcript, "🔌 ${event.message}")
@@ -703,6 +717,7 @@ class MainActivity : AppCompatActivity() {
         if (delta.isBlank()) {
             return
         }
+        appendTerminalAssistantDelta(delta)
         if (isSquirtMode) {
             appendAssistantChunk(delta)
             enqueueSquirtWords(delta)
@@ -900,6 +915,9 @@ class MainActivity : AppCompatActivity() {
         synchronized(streamDetailsLock) {
             streamDetailLines.clear()
         }
+        synchronized(terminalStreamLock) {
+            terminalStreamBlocks.clear()
+        }
         synchronized(squirtQueueLock) {
             squirtQueue.clear()
             squirtCarry.setLength(0)
@@ -1090,17 +1108,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderTranscriptAndAssistant(transcript: String, assistantText: String) {
-        val details = buildStreamDetailsSnapshot()
+        val streamTimeline = buildTerminalStreamSnapshot(activeAssistantLabel())
         binding.terminalOutput.text = buildString {
             append("USR://")
             append(transcript)
-            append("\n\n")
-            append(activeAssistantLabel())
-            append("://")
-            append(assistantText)
-            if (details.isNotBlank()) {
-                append("\n\n──────── STREAM DETAILS ────────\n")
-                append(details)
+            if (streamTimeline.isNotBlank()) {
+                append("\n\n")
+                append(streamTimeline)
+            } else {
+                append("\n\n")
+                append(activeAssistantLabel())
+                append("://")
+                append(assistantText)
             }
         }
         scrollTerminalToBottom()
@@ -1128,11 +1147,78 @@ class MainActivity : AppCompatActivity() {
         if (cleaned.isBlank()) {
             return
         }
+        appendTerminalDetail(cleaned)
         synchronized(streamDetailsLock) {
             streamDetailLines.addLast(cleaned)
             while (streamDetailLines.size > MAX_STREAM_DETAIL_LINES) {
                 streamDetailLines.removeFirst()
             }
+        }
+    }
+
+    private fun appendTerminalAssistantDelta(delta: String) {
+        synchronized(terminalStreamLock) {
+            val lastBlock = terminalStreamBlocks.peekLast()
+            if (lastBlock?.type == TerminalStreamBlockType.ASSISTANT) {
+                lastBlock.text.append(delta)
+            } else {
+                terminalStreamBlocks.addLast(
+                    TerminalStreamBlock(TerminalStreamBlockType.ASSISTANT, StringBuilder(delta))
+                )
+            }
+            trimTerminalStreamBlocksLocked()
+        }
+    }
+
+    private fun appendTerminalDetail(detail: String) {
+        synchronized(terminalStreamLock) {
+            val lastBlock = terminalStreamBlocks.peekLast()
+            if (lastBlock?.type == TerminalStreamBlockType.DETAIL) {
+                lastBlock.text.append('\n').append(detail)
+            } else {
+                terminalStreamBlocks.addLast(
+                    TerminalStreamBlock(TerminalStreamBlockType.DETAIL, StringBuilder(detail))
+                )
+            }
+            trimTerminalStreamBlocksLocked()
+        }
+    }
+
+    private fun trimTerminalStreamBlocksLocked() {
+        while (terminalStreamBlocks.size > MAX_TERMINAL_STREAM_BLOCKS) {
+            terminalStreamBlocks.removeFirst()
+        }
+    }
+
+    private fun buildTerminalStreamSnapshot(assistantLabel: String): String {
+        synchronized(terminalStreamLock) {
+            if (terminalStreamBlocks.isEmpty()) {
+                return ""
+            }
+
+            val output = StringBuilder()
+            var detailsHeaderPrinted = false
+            terminalStreamBlocks.forEach { block ->
+                if (output.isNotEmpty()) {
+                    output.append("\n\n")
+                }
+                when (block.type) {
+                    TerminalStreamBlockType.ASSISTANT -> {
+                        output.append(assistantLabel)
+                        output.append("://")
+                        output.append(block.text)
+                    }
+
+                    TerminalStreamBlockType.DETAIL -> {
+                        if (!detailsHeaderPrinted) {
+                            output.append("──────── STREAM DETAILS ────────\n")
+                            detailsHeaderPrinted = true
+                        }
+                        output.append(block.text)
+                    }
+                }
+            }
+            return output.toString()
         }
     }
 

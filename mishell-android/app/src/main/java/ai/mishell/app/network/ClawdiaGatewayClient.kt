@@ -2,6 +2,7 @@ package ai.mishell.app.network
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import ai.mishell.app.AppSettings
 import ai.mishell.app.BuildConfig
 import kotlinx.coroutines.CompletableDeferred
@@ -27,6 +28,11 @@ class ClawdiaGatewayClient(
     private val baseHttpClient: OkHttpClient,
     private val identityStore: ClawdiaDeviceIdentityStore = ClawdiaDeviceIdentityStore(context)
 ) {
+    companion object {
+        private const val LOG_TAG = "ClawdiaGateway"
+        private const val MAX_LOG_PAYLOAD_CHARS = 1600
+    }
+
     private val appContext = context.applicationContext
 
     interface CancelableStream {
@@ -115,7 +121,7 @@ class ClawdiaGatewayClient(
             val activeRunId = sendResponse.optString("runId").takeIf { it.isNotBlank() } ?: runId
             onEvent(StreamEvent.Status("Run $activeRunId started."))
 
-            var lastAssistantText = ""
+            var emittedAssistantText = ""
             while (true) {
                 if (streamCancelled.get()) {
                     throw IOException("Clawdia stream cancelled")
@@ -138,35 +144,47 @@ class ClawdiaGatewayClient(
                         when (streamName) {
                             "assistant" -> {
                                 val fullText = data.optString("text")
-                                val delta = data.optString("delta").ifBlank {
-                                    when {
-                                        fullText.startsWith(lastAssistantText) ->
-                                            fullText.substring(lastAssistantText.length)
-                                        fullText.isNotBlank() -> fullText
-                                        else -> ""
-                                    }
-                                }
+                                val previousAssistantText = emittedAssistantText
+                                val delta = extractNovelAssistantDelta(
+                                    emittedSoFar = previousAssistantText,
+                                    fullText = fullText,
+                                    deltaHint = data.optString("delta")
+                                )
                                 if (delta.isNotBlank()) {
                                     onEvent(StreamEvent.AssistantDelta(delta))
                                 }
-                                if (fullText.isNotBlank()) {
-                                    lastAssistantText = fullText
+                                emittedAssistantText = when {
+                                    fullText.isNotBlank() && fullText.startsWith(previousAssistantText) ->
+                                        fullText
+                                    delta.isNotBlank() -> previousAssistantText + delta
+                                    else -> previousAssistantText
                                 }
                             }
 
                             "tool" -> {
+                                val toolName = data.optString("name")
+                                    .ifBlank { data.optString("toolName") }
+                                    .ifBlank { data.optString("tool") }
+                                    .ifBlank { "tool" }
+                                val phase = data.optString("phase")
+                                    .ifBlank { data.optString("state") }
+                                    .ifBlank { "update" }
                                 onEvent(
                                     StreamEvent.Tool(
-                                        phase = data.optString("phase", "update"),
-                                        name = data.optString("name", "tool"),
-                                        toolCallId = data.optString("toolCallId").takeIf { it.isNotBlank() },
-                                        isError = data.optBooleanOrNull("isError"),
+                                        phase = phase,
+                                        name = toolName,
+                                        toolCallId = data.optString("toolCallId")
+                                            .ifBlank { data.optString("callId") }
+                                            .ifBlank { data.optString("id") }
+                                            .takeIf { it.isNotBlank() },
+                                        isError = data.optBooleanOrNull("isError")
+                                            ?: data.optBooleanOrNull("error"),
                                         summary = summarizeToolData(data)
                                     )
                                 )
                             }
 
-                            "thinking" -> {
+                            "thinking", "reasoning" -> {
                                 val full = data.optString("text")
                                 val delta = data.optString("delta").ifBlank { full }
                                 if (full.isNotBlank() || delta.isNotBlank()) {
@@ -194,6 +212,13 @@ class ClawdiaGatewayClient(
                                 val detail = data.optString("message").takeIf { it.isNotBlank() }
                                 throw IOException(detail ?: "Clawdia stream error")
                             }
+
+                            else -> {
+                                Log.d(
+                                    LOG_TAG,
+                                    "Unhandled agent stream=$streamName data=${truncateForLog(data.toString())}"
+                                )
+                            }
                         }
                     }
 
@@ -205,9 +230,21 @@ class ClawdiaGatewayClient(
                         val state = payload.optString("state")
                         when (state) {
                             "delta" -> {
-                                val textDelta = extractChatDelta(payload)
+                                val fullText = extractChatMessageText(payload)
+                                val previousAssistantText = emittedAssistantText
+                                val textDelta = extractNovelAssistantDelta(
+                                    emittedSoFar = previousAssistantText,
+                                    fullText = fullText,
+                                    deltaHint = payload.optString("delta").ifBlank { fullText }
+                                )
                                 if (textDelta.isNotBlank()) {
                                     onEvent(StreamEvent.AssistantDelta(textDelta))
+                                }
+                                emittedAssistantText = when {
+                                    fullText.isNotBlank() && fullText.startsWith(previousAssistantText) ->
+                                        fullText
+                                    textDelta.isNotBlank() -> previousAssistantText + textDelta
+                                    else -> previousAssistantText
                                 }
                             }
 
@@ -225,6 +262,13 @@ class ClawdiaGatewayClient(
 
                     "seqGap" -> {
                         throw IOException("Event stream interrupted (seq gap)")
+                    }
+
+                    else -> {
+                        Log.d(
+                            LOG_TAG,
+                            "Unhandled frame event=${frame.event} payload=${truncateForLog(frame.payload?.toString().orEmpty())}"
+                        )
                     }
                 }
             }
@@ -424,6 +468,7 @@ class ClawdiaGatewayClient(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                Log.d(LOG_TAG, "WS <- ${truncateForLog(text)}")
                 val frame = runCatching { JSONObject(text) }.getOrNull() ?: return
                 when (frame.optString("type")) {
                     "res" -> {
@@ -488,17 +533,49 @@ class ClawdiaGatewayClient(
     private fun summarizeToolData(data: JSONObject): String? {
         val summaryParts = mutableListOf<String>()
 
-        data.optString("phase").takeIf { it.isNotBlank() }?.let { summaryParts += "phase=$it" }
-        data.optString("name").takeIf { it.isNotBlank() }?.let { summaryParts += "name=$it" }
-        data.optString("toolCallId").takeIf { it.isNotBlank() }?.let { summaryParts += "id=$it" }
+        data.optString("phase").ifBlank { data.optString("state") }
+            .takeIf { it.isNotBlank() }?.let { summaryParts += "phase=$it" }
+        data.optString("name").ifBlank { data.optString("toolName") }
+            .takeIf { it.isNotBlank() }?.let { summaryParts += "name=$it" }
+        data.optString("toolCallId").ifBlank { data.optString("callId") }
+            .ifBlank { data.optString("id") }
+            .takeIf { it.isNotBlank() }?.let { summaryParts += "id=$it" }
 
-        val args = data.optJSONObject("args")
-        if (args != null) {
-            summaryParts += "args=${truncate(args.toString(), 180)}"
+        val inputValue = when {
+            data.has("args") -> data.opt("args")
+            data.has("input") -> data.opt("input")
+            data.has("arguments") -> data.opt("arguments")
+            else -> null
         }
-        val result = data.opt("result")
-        if (result != null && result != JSONObject.NULL) {
-            summaryParts += "result=${truncate(result.toString(), 220)}"
+        if (inputValue != null && inputValue != JSONObject.NULL) {
+            summaryParts += "input=${truncate(stringifyJsonValue(inputValue), 240)}"
+        }
+
+        val outputValue = when {
+            data.has("result") -> data.opt("result")
+            data.has("output") -> data.opt("output")
+            data.has("response") -> data.opt("response")
+            else -> null
+        }
+        if (outputValue != null && outputValue != JSONObject.NULL) {
+            summaryParts += "output=${truncate(stringifyJsonValue(outputValue), 260)}"
+        }
+
+        val errorValue = when {
+            data.has("errorMessage") -> data.opt("errorMessage")
+            data.has("error") -> data.opt("error")
+            else -> null
+        }
+        if (errorValue != null && errorValue != JSONObject.NULL) {
+            summaryParts += "error=${truncate(stringifyJsonValue(errorValue), 220)}"
+        }
+
+        data.optString("delta").takeIf { it.isNotBlank() }?.let {
+            summaryParts += "delta=${truncate(it, 180)}"
+        }
+
+        if (summaryParts.isEmpty()) {
+            summaryParts += "raw=${truncate(data.toString(), 260)}"
         }
 
         return if (summaryParts.isEmpty()) null else summaryParts.joinToString(" | ")
@@ -508,19 +585,65 @@ class ClawdiaGatewayClient(
         return if (value.length <= maxChars) value else value.take(maxChars) + "…"
     }
 
-    private fun extractChatDelta(payload: JSONObject): String {
+    private fun extractChatMessageText(payload: JSONObject): String {
         val message = payload.optJSONObject("message") ?: return ""
         val content = message.optJSONArray("content") ?: return ""
+        val text = StringBuilder()
         for (index in 0 until content.length()) {
             val block = content.optJSONObject(index) ?: continue
             if (block.optString("type") == "text") {
-                val text = block.optString("text")
-                if (text.isNotBlank()) {
-                    return text
+                val chunk = block.optString("text")
+                if (chunk.isNotBlank()) {
+                    text.append(chunk)
                 }
             }
         }
-        return ""
+        return text.toString()
+    }
+
+    private fun extractNovelAssistantDelta(
+        emittedSoFar: String,
+        fullText: String,
+        deltaHint: String
+    ): String {
+        val fullDelta = when {
+            fullText.isBlank() -> ""
+            fullText.startsWith(emittedSoFar) -> fullText.substring(emittedSoFar.length)
+            else -> fullText
+        }
+        val novelFromFull = removeRepeatedPrefix(emittedSoFar, fullDelta)
+        if (novelFromFull.isNotBlank()) {
+            return novelFromFull
+        }
+        return removeRepeatedPrefix(emittedSoFar, deltaHint)
+    }
+
+    private fun removeRepeatedPrefix(existingText: String, candidate: String): String {
+        if (candidate.isBlank()) {
+            return ""
+        }
+        if (existingText.endsWith(candidate)) {
+            return ""
+        }
+        val maxOverlap = minOf(existingText.length, candidate.length)
+        for (overlap in maxOverlap downTo 1) {
+            if (existingText.endsWith(candidate.substring(0, overlap))) {
+                return candidate.substring(overlap)
+            }
+        }
+        return candidate
+    }
+
+    private fun stringifyJsonValue(value: Any?): String {
+        return when (value) {
+            null, JSONObject.NULL -> ""
+            is JSONObject, is JSONArray -> value.toString()
+            else -> value.toString()
+        }
+    }
+
+    private fun truncateForLog(value: String): String {
+        return truncate(value, MAX_LOG_PAYLOAD_CHARS)
     }
 
     private fun normalizeThinking(raw: String): String {
