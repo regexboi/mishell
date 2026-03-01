@@ -17,9 +17,15 @@ fun quoteForBuildConfig(value: String): String =
 val sttApiKey = (localProperties.getProperty("STT_API_KEY")
     ?: System.getenv("STT_API_KEY")
     ?: "").trim()
+val sttUrl = (localProperties.getProperty("STT_URL")
+    ?: System.getenv("STT_URL")
+    ?: "https://x.li-daggertooth.ts.net/mishell-mcp/api/speech/transcribe").trim()
 val llmStreamUrl = (localProperties.getProperty("LLM_STREAM_URL")
     ?: System.getenv("LLM_STREAM_URL")
-    ?: "https://mishell.mishcaslab.com/v1/llm/stream").trim()
+    ?: "https://x.li-daggertooth.ts.net/mishell-mcp/v1/llm/stream").trim()
+val clawdiaGatewayUrl = (localProperties.getProperty("CLAWDIA_GATEWAY_URL")
+    ?: System.getenv("CLAWDIA_GATEWAY_URL")
+    ?: "https://x.li-daggertooth.ts.net/openclaw").trim()
 
 android {
     namespace = "ai.mishell.app"
@@ -35,7 +41,9 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "STT_API_KEY", quoteForBuildConfig(sttApiKey))
+        buildConfigField("String", "STT_URL", quoteForBuildConfig(sttUrl))
         buildConfigField("String", "LLM_STREAM_URL", quoteForBuildConfig(llmStreamUrl))
+        buildConfigField("String", "CLAWDIA_GATEWAY_URL", quoteForBuildConfig(clawdiaGatewayUrl))
     }
 
     buildTypes {
@@ -66,6 +74,8 @@ dependencies {
     implementation("com.google.android.material:material:1.13.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.security:security-crypto:1.1.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.83")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")

@@ -3,7 +3,7 @@
     <string name="tile_home">Home</string>
     <string name="tile_messages">Messages</string>
     <string name="tile_tasks">Tasks</string>
-    <string name="tile_rover">Rover</string>
+    <string name="tile_config">Config</string>
     <string name="diagnostic_title">TERMINAL / DIAGNOSTICS</string>
     <string name="diagnostic_title_squirt">TERMINAL / SQUIRT MODE</string>
     <string name="mic_label">MIC</string>
@@ -19,13 +19,44 @@ Tap MIC to start voice input.</string>
     <string name="terminal_recording">SYS://recording
 Tap MIC again to transcribe.</string>
     <string name="terminal_transcribing">SYS://transcribing audio...</string>
-    <string name="terminal_generating">USR://%1$s\n\nMISHELL://</string>
     <string name="terminal_empty_transcript">(No transcript returned)</string>
     <string name="terminal_error">ERR://%1$s</string>
+    <string name="err_backend_unavailable">Voice backend is temporarily unavailable (HTTP 530 / code 1033). Please try again shortly.</string>
+    <string name="err_backend_auth">Voice backend authentication failed. Verify API key configuration.</string>
+    <string name="err_backend_http_5xx">Voice backend returned server error HTTP %1$d. Please try again shortly.</string>
+    <string name="err_request_failed">Voice request failed.</string>
     <string name="squirt_speed_label">%1$d WPM</string>
     <string name="mishell_avatar">MISHELL</string>
     <string name="mishell_role">PURPLE WITCH AI</string>
     <string name="banner_text">// BOOT COMPLETE // MISHELL ONLINE // VOICE SHELL READY // CONNECTING STARLINK NODE //</string>
+    <string name="wispr_input_hint">Type with Wispr...</string>
+    <string name="wispr_send">Send</string>
+    <string name="config_title">CONFIG</string>
+    <string name="config_wispr_title">Witch (Whisper) text mode</string>
+    <string name="config_wispr_description">Replace the witch button with a focused text-input row and send button.</string>
+    <string name="config_backend_title">Assistant backend</string>
+    <string name="config_backend_description">Switch between MISHELL SSE endpoint and CLAWDIA OpenClaw gateway streaming.</string>
+    <string name="config_backend_mishell">Mishell</string>
+    <string name="config_backend_clawdia">Clawdia</string>
+    <string name="config_clawdia_title">Clawdia gateway auth</string>
+    <string name="config_clawdia_description">Self-serve setup. Save credentials, trust TLS fingerprint, and verify gateway connectivity from this screen.</string>
+    <string name="config_clawdia_url_hint">Gateway URL (e.g. https://x.li-daggertooth.ts.net/openclaw)</string>
+    <string name="config_clawdia_token_hint">Gateway token (preferred)</string>
+    <string name="config_clawdia_password_hint">Gateway password (fallback)</string>
+    <string name="config_clawdia_save_test">Save + Trust + Test Clawdia</string>
+    <string name="config_clawdia_status_idle">Clawdia status: idle</string>
+    <string name="config_clawdia_status_saving">Clawdia status: saving…</string>
+    <string name="config_clawdia_status_testing">Clawdia status: testing connection…</string>
+    <string name="config_clawdia_status_ok">Clawdia status: connected ✓</string>
+    <string name="config_clawdia_status_error">Clawdia status: %1$s</string>
+    <string name="config_clawdia_tls_trust_title">Trust gateway TLS fingerprint?</string>
+    <string name="config_clawdia_tls_trust_message">Verify this SHA-256 fingerprint, then trust to continue:
+
+%1$s</string>
+    <string name="config_clawdia_tls_trust_confirm">Trust and continue</string>
+    <string name="config_clawdia_tls_trust_cancel">Cancel</string>
+    <string name="config_clawdia_missing_auth">Provide token or password before testing.</string>
+    <string name="config_clawdia_invalid_url">Invalid Clawdia gateway URL.</string>
     <string name="placeholder_label">Placeholder %1$d</string>
     <string name="placeholder_back">Back</string>
 </resources>

@@ -30,6 +30,13 @@
         android:orientation="horizontal"
         app:layout_constraintGuide_percent="0.79" />
 
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/guide_bottom_split"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.23" />
+
     <GridLayout
         android:id="@+id/icon_grid"
         android:layout_width="0dp"
@@ -84,7 +91,7 @@
 
             <TextView
                 style="@style/NeonTileLabel"
-                android:text="@string/tile_rover" />
+                android:text="@string/tile_config" />
         </LinearLayout>
     </GridLayout>
 
@@ -128,6 +135,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="monospace"
                 android:lineSpacingExtra="3dp"
+                android:paddingBottom="6dp"
                 android:text="@string/terminal_waiting"
                 android:textColor="@color/cyber_text_dim"
                 android:textSize="12sp" />
@@ -267,11 +275,58 @@
             app:tint="@null" />
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/wispr_input_bar"
+        android:layout_width="0dp"
+        android:layout_height="58dp"
+        android:layout_marginEnd="6dp"
+        android:background="@drawable/bg_banner"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/guide_bottom_split"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <androidx.appcompat.widget.AppCompatEditText
+            android:id="@+id/wispr_input"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.9"
+            android:background="@android:color/transparent"
+            android:fontFamily="monospace"
+            android:hint="@string/wispr_input_hint"
+            android:imeOptions="flagNoExtractUi"
+            android:inputType="text|textNoSuggestions"
+            android:maxLines="1"
+            android:paddingHorizontal="10dp"
+            android:textColor="@color/cyber_text"
+            android:textColorHint="@color/cyber_text_dim"
+            android:textSize="16sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/wispr_send_button"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.1"
+            android:background="@drawable/card_neon_selector"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:paddingHorizontal="10dp"
+            android:text="@string/wispr_send"
+            android:textAllCaps="false"
+            android:textColor="@color/cyber_cyan" />
+    </LinearLayout>
+
     <TextView
         android:id="@+id/bottom_banner"
         android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginEnd="12dp"
+        android:layout_height="58dp"
+        android:layout_marginStart="6dp"
         android:background="@drawable/bg_banner"
         android:ellipsize="marquee"
         android:fadingEdge="horizontal"
@@ -286,9 +341,8 @@
         android:textColor="@color/cyber_text"
         android:textSize="26sp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toStartOf="@+id/guide_center_end"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="@+id/guide_bottom_start"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="@+id/guide_bottom_split"
         tools:text="BOOTING MISHELL CORE // LISTENING // READY" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

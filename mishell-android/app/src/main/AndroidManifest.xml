@@ -17,6 +17,11 @@
             android:screenOrientation="sensorLandscape" />
 
         <activity
+            android:name=".ConfigActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:screenOrientation="sensorLandscape">

@@ -7,11 +7,13 @@ import android.media.MediaRecorder
 import android.os.Bundle
 import android.transition.AutoTransition
 import android.transition.TransitionManager
+import android.util.Log
 import android.util.TypedValue
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
+import android.view.inputmethod.InputMethodManager
 import androidx.activity.OnBackPressedCallback
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,6 +23,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import ai.mishell.app.databinding.ActivityMainBinding
+import ai.mishell.app.network.ClawdiaGatewayClient
 import ai.mishell.app.network.LlmStreamClient
 import ai.mishell.app.network.SseEvent
 import androidx.lifecycle.lifecycleScope
@@ -48,7 +51,8 @@ import kotlin.math.roundToLong
 
 class MainActivity : AppCompatActivity() {
     companion object {
-        private const val STT_URL = "https://mishell.mishcaslab.com/api/speech/transcribe"
+        private const val LOG_TAG = "MishellVoice"
+        private const val STT_MAX_ATTEMPTS = 3
         private const val SQUIRT_MIN_WPM = 180
         private const val SQUIRT_MAX_WPM = 1100
         private const val SQUIRT_WPM_STEP = 20
@@ -56,6 +60,7 @@ class MainActivity : AppCompatActivity() {
         private const val SQUIRT_RAMP_WORD_COUNT = 18
         private const val SQUIRT_RAMP_FLOOR_MULTIPLIER = 0.45f
         private const val SQUIRT_BASE_TEXT_SIZE_SP = 40f
+        private const val MAX_STREAM_DETAIL_LINES = 120
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -65,10 +70,13 @@ class MainActivity : AppCompatActivity() {
     private var recordingFile: File? = null
     private val httpClient = OkHttpClient()
     private val llmStreamClient = LlmStreamClient(httpClient)
+    private val clawdiaGatewayClient by lazy { ClawdiaGatewayClient(applicationContext, httpClient) }
     private val sessionId = UUID.randomUUID().toString()
+    private val clawdiaSessionKey = "main"
     private var activeWorkJob: Job? = null
     private var activeSttCall: Call? = null
     private var activeLlmCall: Call? = null
+    private var activeClawdiaStream: ClawdiaGatewayClient.CancelableStream? = null
     private var isTerminalFullscreen = false
     @Volatile
     private var isSquirtMode = false
@@ -81,12 +89,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var terminalTapDetector: GestureDetector
     private val defaultConstraints = ConstraintSet()
     private val fullscreenConstraints = ConstraintSet()
+    private val wisprConstraints = ConstraintSet()
+    private val wisprFullscreenConstraints = ConstraintSet()
+    private var isWisprTextMode = false
     private val assistantTextLock = Any()
     private val assistantTextBuffer = StringBuilder(1024)
     private val squirtQueueLock = Any()
     private val squirtQueue = ArrayDeque<String>()
     private val squirtCarry = StringBuilder(128)
     private val tmpViewLocation = IntArray(2)
+    private val streamDetailsLock = Any()
+    private val streamDetailLines = ArrayDeque<String>()
 
     private val audioPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -107,6 +120,7 @@ class MainActivity : AppCompatActivity() {
         setupTiles()
         setupTerminalFullscreenToggle()
         setupMicButton()
+        setupWisprInputBar()
         setupSquirtControls()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -122,6 +136,7 @@ class MainActivity : AppCompatActivity() {
 
         renderSquirtPlaceholder()
         binding.bottomBanner.isSelected = true
+        setWisprTextMode(AppSettings.isWisprTextModeEnabled(this), animate = false)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -129,6 +144,11 @@ class MainActivity : AppCompatActivity() {
         if (hasFocus) {
             enableImmersiveMode()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        setWisprTextMode(AppSettings.isWisprTextModeEnabled(this), animate = false)
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -153,10 +173,14 @@ class MainActivity : AppCompatActivity() {
 
         tiles.forEachIndexed { index, view ->
             view.setOnClickListener {
-                startActivity(
-                    Intent(this, PlaceholderActivity::class.java)
-                        .putExtra(PlaceholderActivity.EXTRA_PLACEHOLDER_NUMBER, index + 1)
-                )
+                if (index == 3) {
+                    startActivity(Intent(this, ConfigActivity::class.java))
+                } else {
+                    startActivity(
+                        Intent(this, PlaceholderActivity::class.java)
+                            .putExtra(PlaceholderActivity.EXTRA_PLACEHOLDER_NUMBER, index + 1)
+                    )
+                }
             }
         }
     }
@@ -170,6 +194,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
         binding.micButton.setOnClickListener(onMicClick)
+    }
+
+    private fun setupWisprInputBar() {
+        binding.wisprInput.showSoftInputOnFocus = false
+        binding.wisprInput.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                suppressSystemKeyboard()
+            }
+        }
+        binding.wisprInput.setOnClickListener {
+            suppressSystemKeyboard()
+        }
+        binding.wisprSendButton.setOnClickListener {
+            submitWisprPrompt()
+        }
     }
 
     private fun setupSquirtControls() {
@@ -186,6 +225,9 @@ class MainActivity : AppCompatActivity() {
     private fun setupTerminalFullscreenToggle() {
         defaultConstraints.clone(binding.root)
         fullscreenConstraints.clone(binding.root)
+        wisprConstraints.clone(binding.root)
+        wisprFullscreenConstraints.clone(binding.root)
+
         fullscreenConstraints.connect(
             binding.diagnosticPanel.id,
             ConstraintSet.START,
@@ -214,6 +256,43 @@ class MainActivity : AppCompatActivity() {
         fullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.END, 12)
         fullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.TOP, 0)
         fullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.BOTTOM, 0)
+
+        wisprConstraints.connect(
+            binding.diagnosticPanel.id,
+            ConstraintSet.END,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.END
+        )
+        wisprConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.END, 0)
+
+        wisprFullscreenConstraints.connect(
+            binding.diagnosticPanel.id,
+            ConstraintSet.START,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.START
+        )
+        wisprFullscreenConstraints.connect(
+            binding.diagnosticPanel.id,
+            ConstraintSet.END,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.END
+        )
+        wisprFullscreenConstraints.connect(
+            binding.diagnosticPanel.id,
+            ConstraintSet.TOP,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.TOP
+        )
+        wisprFullscreenConstraints.connect(
+            binding.diagnosticPanel.id,
+            ConstraintSet.BOTTOM,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.BOTTOM
+        )
+        wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.START, 0)
+        wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.END, 0)
+        wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.TOP, 0)
+        wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.BOTTOM, 0)
 
         terminalTapDetector = GestureDetector(
             this,
@@ -285,30 +364,53 @@ class MainActivity : AppCompatActivity() {
         setSquirtMode(!isSquirtMode)
     }
 
-    private fun setTerminalFullscreen(fullscreen: Boolean) {
-        if (isTerminalFullscreen == fullscreen) {
+    private fun setTerminalFullscreen(fullscreen: Boolean, animate: Boolean = true, force: Boolean = false) {
+        if (!force && isTerminalFullscreen == fullscreen) {
             return
         }
         isTerminalFullscreen = fullscreen
-        TransitionManager.beginDelayedTransition(
-            binding.root,
-            AutoTransition().apply {
-                duration = 320L
-                interpolator = DecelerateInterpolator(1.6f)
-            }
-        )
-
-        if (fullscreen) {
-            fullscreenConstraints.applyTo(binding.root)
-            binding.iconGrid.visibility = View.GONE
-            binding.bottomBanner.visibility = View.GONE
-        } else {
-            defaultConstraints.applyTo(binding.root)
-            binding.iconGrid.visibility = View.VISIBLE
-            binding.bottomBanner.visibility = View.VISIBLE
+        if (animate) {
+            TransitionManager.beginDelayedTransition(
+                binding.root,
+                AutoTransition().apply {
+                    duration = 320L
+                    interpolator = DecelerateInterpolator(1.6f)
+                }
+            )
         }
 
+        when {
+            fullscreen && isWisprTextMode -> wisprFullscreenConstraints.applyTo(binding.root)
+            fullscreen -> fullscreenConstraints.applyTo(binding.root)
+            isWisprTextMode -> wisprConstraints.applyTo(binding.root)
+            else -> defaultConstraints.applyTo(binding.root)
+        }
+
+        if (fullscreen) {
+            binding.iconGrid.visibility = View.GONE
+            binding.bottomBanner.visibility = View.GONE
+            binding.wisprInputBar.visibility = View.GONE
+            binding.rightStack.visibility = View.GONE
+        } else {
+            binding.iconGrid.visibility = View.VISIBLE
+            binding.bottomBanner.visibility = View.VISIBLE
+            binding.wisprInputBar.visibility = if (isWisprTextMode) View.VISIBLE else View.GONE
+            binding.rightStack.visibility = if (isWisprTextMode) View.GONE else View.VISIBLE
+        }
         scrollTerminalToBottom()
+    }
+
+    private fun setWisprTextMode(enabled: Boolean, animate: Boolean) {
+        if (isWisprTextMode == enabled) {
+            return
+        }
+        isWisprTextMode = enabled
+        if (!enabled) {
+            binding.wisprInput.clearFocus()
+        } else {
+            suppressSystemKeyboard()
+        }
+        setTerminalFullscreen(isTerminalFullscreen, animate = animate, force = true)
     }
 
     private fun setSquirtMode(enabled: Boolean) {
@@ -413,11 +515,55 @@ class MainActivity : AppCompatActivity() {
         uploadRecording(file)
     }
 
+    private fun submitWisprPrompt() {
+        if (!isWisprTextMode || isBusy) {
+            return
+        }
+        val transcript = binding.wisprInput.text?.toString()?.trim().orEmpty()
+        if (transcript.isBlank()) {
+            return
+        }
+        binding.wisprInput.text?.clear()
+        suppressSystemKeyboard()
+        submitTextPrompt(transcript)
+    }
+
+    private fun submitTextPrompt(transcript: String) {
+        cancelActiveWork()
+        resetAssistantStreamState()
+        latestTranscript = transcript
+        isBusy = true
+        setMicButtonEnabled(false)
+        setWisprInputEnabled(false)
+        showGeneratingState(transcript)
+
+        activeWorkJob = lifecycleScope.launch {
+            var errorMessage: String? = null
+            try {
+                withContext(Dispatchers.IO) {
+                    streamAssistantResponse(transcript)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e(LOG_TAG, "Text input pipeline failed", error)
+                errorMessage = toDisplayableErrorMessage(error)
+            } finally {
+                isAssistantStreamComplete = true
+                flushSquirtCarryWord()
+                activeLlmCall = null
+                activeClawdiaStream = null
+                finalizeActiveRequest(transcript, errorMessage)
+            }
+        }
+    }
+
     private fun uploadRecording(file: File) {
         cancelActiveWork()
         resetAssistantStreamState()
         isBusy = true
         setMicButtonEnabled(false)
+        setWisprInputEnabled(false)
         binding.micStatus.text = getString(R.string.mic_transcribing)
         binding.terminalOutput.text = getString(R.string.terminal_transcribing)
 
@@ -426,7 +572,7 @@ class MainActivity : AppCompatActivity() {
             var errorMessage: String? = null
             try {
                 transcript = withContext(Dispatchers.IO) {
-                    transcribeRecording(file)
+                    transcribeRecordingWithRetry(file)
                 }
                 latestTranscript = transcript
 
@@ -439,55 +585,17 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 withContext(Dispatchers.Main.immediate) {
-                    binding.micStatus.text = getString(R.string.mic_generating)
-                    binding.terminalOutput.text = getString(R.string.terminal_generating, transcript)
-                    renderSquirtPlaceholder()
-                    ensureSquirtPlaybackLoop()
-                    scrollTerminalToBottom()
+                    showGeneratingState(transcript)
                 }
 
                 withContext(Dispatchers.IO) {
-                    llmStreamClient.streamText(
-                        url = BuildConfig.LLM_STREAM_URL,
-                        apiKey = BuildConfig.STT_API_KEY,
-                        text = transcript,
-                        sessionId = sessionId,
-                        onCallLifecycle = { call -> activeLlmCall = call },
-                    ) { event ->
-                        when (event) {
-                            is SseEvent.Delta -> {
-                                if (isSquirtMode) {
-                                    appendAssistantChunk(event.text)
-                                    enqueueSquirtWords(event.text)
-                                    if (squirtPlaybackJob?.isActive != true) {
-                                        runOnUiThread {
-                                            ensureSquirtPlaybackLoop()
-                                        }
-                                    }
-                                } else {
-                                    val fullAssistantText = appendAssistantChunkAndSnapshot(event.text)
-                                    runOnUiThread {
-                                        renderTranscriptAndAssistant(transcript, fullAssistantText)
-                                    }
-                                }
-                            }
-                            SseEvent.Done -> {
-                                isAssistantStreamComplete = true
-                                flushSquirtCarryWord()
-                                if (isSquirtMode) {
-                                    runOnUiThread {
-                                        ensureSquirtPlaybackLoop()
-                                    }
-                                }
-                            }
-                            is SseEvent.Error -> throw IOException(event.message)
-                        }
-                    }
+                    streamAssistantResponse(transcript)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                errorMessage = error.message ?: "request failed"
+                Log.e(LOG_TAG, "Voice input pipeline failed", error)
+                errorMessage = toDisplayableErrorMessage(error)
             } finally {
                 isAssistantStreamComplete = true
                 flushSquirtCarryWord()
@@ -495,27 +603,155 @@ class MainActivity : AppCompatActivity() {
                 recordingFile = null
                 activeSttCall = null
                 activeLlmCall = null
+                activeClawdiaStream = null
 
-                withContext(NonCancellable + Dispatchers.Main.immediate) {
-                    isBusy = false
-                    setMicButtonEnabled(true)
-                    binding.micStatus.text = getString(R.string.mic_idle)
-
-                    if (errorMessage != null) {
-                        showTerminalError(errorMessage ?: "request failed")
-                    } else if (transcript.isNotBlank() && getAssistantTextSnapshot().isBlank()) {
-                        renderTranscriptAndAssistant(transcript, "")
-                    } else {
-                        ensureSquirtPlaybackLoop()
-                    }
-                }
-
-                activeWorkJob = null
+                finalizeActiveRequest(transcript, errorMessage)
             }
         }
     }
 
+    private fun showGeneratingState(transcript: String) {
+        binding.micStatus.text = getString(R.string.mic_generating)
+        renderTranscriptAndAssistant(transcript, "")
+        renderSquirtPlaceholder()
+        ensureSquirtPlaybackLoop()
+        scrollTerminalToBottom()
+    }
+
+    private suspend fun streamAssistantResponse(transcript: String) {
+        when (AppSettings.getBackendMode(this)) {
+            AppSettings.BackendMode.MISHELL -> streamMishellAssistantResponse(transcript)
+            AppSettings.BackendMode.CLAWDIA -> streamClawdiaAssistantResponse(transcript)
+        }
+    }
+
+    private suspend fun streamMishellAssistantResponse(transcript: String) {
+        llmStreamClient.streamText(
+            url = BuildConfig.LLM_STREAM_URL,
+            apiKey = BuildConfig.STT_API_KEY,
+            text = transcript,
+            sessionId = sessionId,
+            onCallLifecycle = { call -> activeLlmCall = call },
+            onEvent = { event ->
+                when (event) {
+                    is SseEvent.Delta -> handleAssistantDelta(transcript, event.text)
+                    SseEvent.Done -> handleStreamDone()
+                    is SseEvent.Error -> throw IOException(event.message)
+                }
+            }
+        )
+    }
+
+    private suspend fun streamClawdiaAssistantResponse(transcript: String) {
+        val config = AppSettings.getClawdiaConnectionConfig(this)
+            ?: throw IOException("Clawdia config is incomplete. Open Config and save/test setup.")
+        if (config.token.isBlank() && config.password.isBlank()) {
+            throw IOException("Clawdia auth missing. Provide token or password in Config.")
+        }
+
+        clawdiaGatewayClient.streamText(
+            config = config,
+            text = transcript,
+            sessionKey = clawdiaSessionKey,
+            thinkingLevel = "high",
+            onCallLifecycle = { handle -> activeClawdiaStream = handle },
+            onEvent = { event ->
+                when (event) {
+                    is ClawdiaGatewayClient.StreamEvent.Status -> {
+                        appendStreamDetailAndRender(transcript, "🔌 ${event.message}")
+                    }
+                    is ClawdiaGatewayClient.StreamEvent.AssistantDelta -> {
+                        handleAssistantDelta(transcript, event.text)
+                    }
+                    is ClawdiaGatewayClient.StreamEvent.Tool -> {
+                        val icon = when (event.phase.lowercase()) {
+                            "start" -> "🛠"
+                            "update" -> "🧩"
+                            "result" -> if (event.isError == true) "❌" else "✅"
+                            else -> "🔧"
+                        }
+                        val callId = event.toolCallId?.let { " #$it" }.orEmpty()
+                        val summary = event.summary?.takeIf { it.isNotBlank() }?.let { "\n│ $it" }.orEmpty()
+                        appendStreamDetailAndRender(
+                            transcript,
+                            "$icon TOOL/${event.phase.uppercase()} ${event.name}$callId$summary"
+                        )
+                    }
+                    is ClawdiaGatewayClient.StreamEvent.Reasoning -> {
+                        val chunk = event.delta.ifBlank { event.text }.trim()
+                        if (chunk.isNotBlank()) {
+                            appendStreamDetailAndRender(
+                                transcript,
+                                "🧠 REASONING ${chunk.replace('\n', ' ')}"
+                            )
+                        }
+                    }
+                    is ClawdiaGatewayClient.StreamEvent.Lifecycle -> {
+                        val detail = event.detail?.takeIf { it.isNotBlank() }?.let { " :: $it" }.orEmpty()
+                        appendStreamDetailAndRender(
+                            transcript,
+                            "📡 LIFECYCLE/${event.phase.uppercase()}$detail"
+                        )
+                    }
+                    ClawdiaGatewayClient.StreamEvent.Done -> handleStreamDone()
+                }
+            }
+        )
+    }
+
+    private fun handleAssistantDelta(transcript: String, delta: String) {
+        if (delta.isBlank()) {
+            return
+        }
+        if (isSquirtMode) {
+            appendAssistantChunk(delta)
+            enqueueSquirtWords(delta)
+            if (squirtPlaybackJob?.isActive != true) {
+                runOnUiThread {
+                    ensureSquirtPlaybackLoop()
+                }
+            }
+        } else {
+            val fullAssistantText = appendAssistantChunkAndSnapshot(delta)
+            runOnUiThread {
+                renderTranscriptAndAssistant(transcript, fullAssistantText)
+            }
+        }
+    }
+
+    private fun handleStreamDone() {
+        isAssistantStreamComplete = true
+        flushSquirtCarryWord()
+        if (isSquirtMode) {
+            runOnUiThread {
+                ensureSquirtPlaybackLoop()
+            }
+        }
+    }
+
+    private suspend fun finalizeActiveRequest(transcript: String, errorMessage: String?) {
+        withContext(NonCancellable + Dispatchers.Main.immediate) {
+            isBusy = false
+            setMicButtonEnabled(true)
+            setWisprInputEnabled(true)
+            binding.micStatus.text = getString(R.string.mic_idle)
+
+            if (errorMessage != null) {
+                showTerminalError(errorMessage)
+            } else if (transcript.isNotBlank() && getAssistantTextSnapshot().isBlank()) {
+                renderTranscriptAndAssistant(transcript, "")
+            } else {
+                ensureSquirtPlaybackLoop()
+            }
+        }
+        activeWorkJob = null
+    }
+
     private fun transcribeRecording(file: File): String {
+        if (BuildConfig.STT_URL.isBlank()) {
+            throw IOException("STT URL is not configured.")
+        }
+
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart(
@@ -528,7 +764,7 @@ class MainActivity : AppCompatActivity() {
             .build()
 
         val request = Request.Builder()
-            .url(STT_URL)
+            .url(BuildConfig.STT_URL)
             .addHeader("x-api-key", BuildConfig.STT_API_KEY)
             .post(requestBody)
             .build()
@@ -538,9 +774,67 @@ class MainActivity : AppCompatActivity() {
         call.execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
+                Log.e(LOG_TAG, "STT request failed. code=${response.code}, body=${body.take(800)}")
                 throw IOException("HTTP ${response.code}: ${body.take(300)}")
             }
             return extractTranscript(body)
+        }
+    }
+
+    private fun transcribeRecordingWithRetry(file: File): String {
+        var lastError: IOException? = null
+        repeat(STT_MAX_ATTEMPTS) { attemptIndex ->
+            try {
+                return transcribeRecording(file)
+            } catch (error: IOException) {
+                lastError = error
+                val attemptNumber = attemptIndex + 1
+                val shouldRetry = shouldRetrySttRequest(error) && attemptNumber < STT_MAX_ATTEMPTS
+                if (!shouldRetry) {
+                    throw error
+                }
+                val backoffMs = 350L * attemptNumber
+                Log.w(
+                    LOG_TAG,
+                    "STT attempt $attemptNumber failed, retrying in ${backoffMs}ms: ${error.message}"
+                )
+                Thread.sleep(backoffMs)
+            }
+        }
+        throw lastError ?: IOException("STT request failed")
+    }
+
+    private fun shouldRetrySttRequest(error: IOException): Boolean {
+        val message = (error.message ?: "").lowercase()
+        val statusCode = parseHttpStatusCode(error.message)
+        return statusCode in setOf(408, 425, 429, 500, 502, 503, 504, 530) ||
+            message.contains("error code: 1033") ||
+            message.contains("timeout") ||
+            message.contains("connection reset") ||
+            message.contains("unexpected end of stream")
+    }
+
+    private fun parseHttpStatusCode(message: String?): Int? {
+        val value = Regex("""\bHTTP\s+(\d{3})""", RegexOption.IGNORE_CASE)
+            .find(message.orEmpty())
+            ?.groupValues
+            ?.getOrNull(1)
+        return value?.toIntOrNull()
+    }
+
+    private fun toDisplayableErrorMessage(error: Exception): String {
+        val raw = error.message?.trim().orEmpty()
+        val rawLower = raw.lowercase()
+        val statusCode = parseHttpStatusCode(raw)
+        return when {
+            statusCode == 530 || rawLower.contains("error code: 1033") ->
+                getString(R.string.err_backend_unavailable)
+            statusCode == 401 || statusCode == 403 ->
+                getString(R.string.err_backend_auth)
+            statusCode != null && statusCode >= 500 ->
+                getString(R.string.err_backend_http_5xx, statusCode)
+            raw.isNotBlank() -> raw
+            else -> getString(R.string.err_request_failed)
         }
     }
 
@@ -585,13 +879,26 @@ class MainActivity : AppCompatActivity() {
         binding.micButton.isEnabled = enabled
     }
 
+    private fun setWisprInputEnabled(enabled: Boolean) {
+        binding.wisprInput.isEnabled = enabled
+        binding.wisprSendButton.isEnabled = enabled
+    }
+
     private fun setMicButtonSelected(selected: Boolean) {
         binding.micButton.isSelected = selected
+    }
+
+    private fun suppressSystemKeyboard() {
+        val inputMethodManager = getSystemService(InputMethodManager::class.java)
+        inputMethodManager?.hideSoftInputFromWindow(binding.wisprInput.windowToken, 0)
     }
 
     private fun resetAssistantStreamState() {
         synchronized(assistantTextLock) {
             assistantTextBuffer.setLength(0)
+        }
+        synchronized(streamDetailsLock) {
+            streamDetailLines.clear()
         }
         synchronized(squirtQueueLock) {
             squirtQueue.clear()
@@ -771,18 +1078,68 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showTerminalError(message: String) {
-        binding.terminalOutput.text = getString(R.string.terminal_error, message)
+        val details = buildStreamDetailsSnapshot()
+        binding.terminalOutput.text = buildString {
+            append(getString(R.string.terminal_error, message))
+            if (details.isNotBlank()) {
+                append("\n\n──────── STREAM DETAILS ────────\n")
+                append(details)
+            }
+        }
         scrollTerminalToBottom()
     }
 
     private fun renderTranscriptAndAssistant(transcript: String, assistantText: String) {
+        val details = buildStreamDetailsSnapshot()
         binding.terminalOutput.text = buildString {
             append("USR://")
             append(transcript)
-            append("\n\nMISHELL://")
+            append("\n\n")
+            append(activeAssistantLabel())
+            append("://")
             append(assistantText)
+            if (details.isNotBlank()) {
+                append("\n\n──────── STREAM DETAILS ────────\n")
+                append(details)
+            }
         }
         scrollTerminalToBottom()
+    }
+
+    private fun activeAssistantLabel(): String {
+        return when (AppSettings.getBackendMode(this)) {
+            AppSettings.BackendMode.MISHELL -> "MISHELL"
+            AppSettings.BackendMode.CLAWDIA -> "CLAWDIA"
+        }
+    }
+
+    private fun appendStreamDetailAndRender(transcript: String, line: String) {
+        appendStreamDetail(line)
+        if (!isSquirtMode) {
+            val assistantText = getAssistantTextSnapshot()
+            runOnUiThread {
+                renderTranscriptAndAssistant(transcript, assistantText)
+            }
+        }
+    }
+
+    private fun appendStreamDetail(line: String) {
+        val cleaned = line.trim()
+        if (cleaned.isBlank()) {
+            return
+        }
+        synchronized(streamDetailsLock) {
+            streamDetailLines.addLast(cleaned)
+            while (streamDetailLines.size > MAX_STREAM_DETAIL_LINES) {
+                streamDetailLines.removeFirst()
+            }
+        }
+    }
+
+    private fun buildStreamDetailsSnapshot(): String {
+        synchronized(streamDetailsLock) {
+            return streamDetailLines.joinToString(separator = "\n")
+        }
     }
 
     private fun scrollTerminalToBottom() {
@@ -795,9 +1152,11 @@ class MainActivity : AppCompatActivity() {
         activeWorkJob?.cancel()
         activeSttCall?.cancel()
         activeLlmCall?.cancel()
+        activeClawdiaStream?.cancel()
         activeWorkJob = null
         activeSttCall = null
         activeLlmCall = null
+        activeClawdiaStream = null
     }
 
     private fun enableImmersiveMode() {
