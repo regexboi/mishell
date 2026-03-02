@@ -50,6 +50,9 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.ArrayDeque
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.max
@@ -88,6 +91,7 @@ class MainActivity : AppCompatActivity() {
     private var activeLlmCall: Call? = null
     private var activeClawdiaStream: ClawdiaGatewayClient.CancelableStream? = null
     private var rssTickerJob: Job? = null
+    private var homeClockJob: Job? = null
     private var rssTickerTitles: List<String> = emptyList()
     private var rssTickerOffset = 0
     private var isTerminalFullscreen = false
@@ -120,6 +124,7 @@ class MainActivity : AppCompatActivity() {
     private val streamDetailLines = ArrayDeque<String>()
     private val terminalStreamLock = Any()
     private val terminalStreamBlocks = ArrayDeque<TerminalStreamBlock>()
+    private val homeClockFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale.US)
 
     private enum class TerminalStreamBlockType {
         ASSISTANT,
@@ -187,6 +192,17 @@ class MainActivity : AppCompatActivity() {
         setWisprTextMode(AppSettings.isWisprTextModeEnabled(this), animate = false)
     }
 
+    override fun onStart() {
+        super.onStart()
+        startHomeClock()
+    }
+
+    override fun onStop() {
+        homeClockJob?.cancel()
+        homeClockJob = null
+        super.onStop()
+    }
+
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (::binding.isInitialized) {
             if (handleSquirtTwoFingerToggle(event)) {
@@ -219,6 +235,29 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun startHomeClock() {
+        if (homeClockJob?.isActive == true) {
+            return
+        }
+        updateHomeClockLabel()
+        homeClockJob = lifecycleScope.launch(Dispatchers.Main.immediate) {
+            while (isActive) {
+                val delayToNextSecond = 1_000L - (System.currentTimeMillis() % 1_000L)
+                delay(delayToNextSecond)
+                if (!isActive) {
+                    break
+                }
+                updateHomeClockLabel()
+            }
+        }
+    }
+
+    private fun updateHomeClockLabel() {
+        binding.tile1Label.text = LocalTime.now()
+            .format(homeClockFormatter)
+            .lowercase(Locale.US)
     }
 
     private fun setupMicButton() {
@@ -1566,6 +1605,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         wisprComposeDialog?.dismiss()
         wisprComposeDialog = null
+        homeClockJob?.cancel()
+        homeClockJob = null
         rssTickerJob?.cancel()
         rssTickerJob = null
         cancelActiveWork()

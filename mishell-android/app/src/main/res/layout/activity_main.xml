@@ -56,9 +56,11 @@
             android:clickable="true"
             android:focusable="true">
 
-            <TextView
-                style="@style/NeonTileLabel"
-                android:text="@string/tile_home" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tile_1_label"
+                style="@style/NeonTileClockLabel"
+                android:text="@string/tile_home"
+                tools:text="09:00 pm" />
         </LinearLayout>
 
         <LinearLayout
@@ -67,9 +69,11 @@
             android:clickable="true"
             android:focusable="true">
 
-            <TextView
-                style="@style/NeonTileLabel"
-                android:text="@string/tile_messages" />
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/tile_2_icon"
+                style="@style/NeonTileIcon"
+                android:contentDescription="@string/tile_messages"
+                app:srcCompat="@drawable/rss" />
         </LinearLayout>
 
         <LinearLayout
@@ -78,9 +82,11 @@
             android:clickable="true"
             android:focusable="true">
 
-            <TextView
-                style="@style/NeonTileLabel"
-                android:text="@string/tile_tasks" />
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/tile_3_icon"
+                style="@style/NeonTileIcon"
+                android:contentDescription="@string/tile_tasks"
+                app:srcCompat="@drawable/todo" />
         </LinearLayout>
 
         <LinearLayout
@@ -89,9 +95,11 @@
             android:clickable="true"
             android:focusable="true">
 
-            <TextView
-                style="@style/NeonTileLabel"
-                android:text="@string/tile_config" />
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/tile_4_icon"
+                style="@style/NeonTileIcon"
+                android:contentDescription="@string/tile_config"
+                app:srcCompat="@drawable/gear" />
         </LinearLayout>
     </GridLayout>
 
