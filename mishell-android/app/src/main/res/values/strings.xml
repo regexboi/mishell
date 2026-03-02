@@ -29,6 +29,7 @@ Tap MIC again to transcribe.</string>
     <string name="mishell_avatar">MISHELL</string>
     <string name="mishell_role">PURPLE WITCH AI</string>
     <string name="banner_text">// BOOT COMPLETE // MISHELL ONLINE // VOICE SHELL READY // CONNECTING STARLINK NODE //</string>
+    <string name="banner_rss_prefix">RSS:// </string>
     <string name="wispr_input_hint">Type with Wispr...</string>
     <string name="wispr_send">Send</string>
     <string name="config_title">CONFIG</string>
@@ -59,4 +60,29 @@ Tap MIC again to transcribe.</string>
     <string name="config_clawdia_invalid_url">Invalid Clawdia gateway URL.</string>
     <string name="placeholder_label">Placeholder %1$d</string>
     <string name="placeholder_back">Back</string>
+    <string name="summaries_title">RSS Summaries</string>
+    <string name="summaries_subtitle">Auto-scrolling summary snippets from Postgres.</string>
+    <string name="summaries_status_loading">Loading summaries…</string>
+    <string name="summaries_status_loaded">%1$d summaries loaded</string>
+    <string name="summaries_status_empty">No summaries available.</string>
+    <string name="summaries_status_error">Summary load failed: %1$s</string>
+    <string name="articles_title">Articles</string>
+    <string name="articles_subtitle">Tap an article to read inside the app.</string>
+    <string name="articles_status_loading">Loading articles…</string>
+    <string name="articles_status_loaded">%1$d articles loaded</string>
+    <string name="articles_status_empty">No articles available.</string>
+    <string name="articles_status_error">Article load failed: %1$s</string>
+    <string name="articles_no_excerpt">No excerpt available.</string>
+    <string name="article_open_original">Open original</string>
+    <string name="article_open_link_symbol">↗</string>
+    <string name="article_back_symbol">←</string>
+    <string name="article_meta_format">%1$s • %2$s</string>
+    <string name="article_unknown_source">Unknown source</string>
+    <string name="article_unknown_date">Unknown date</string>
+    <string name="article_status_loading">Loading article…</string>
+    <string name="article_status_loaded">Loaded</string>
+    <string name="article_status_not_found">Article not found.</string>
+    <string name="article_status_no_content">No full content available for this article.</string>
+    <string name="article_status_error">Article error: %1$s</string>
+    <string name="article_status_missing_id">Missing article id.</string>
 </resources>

@@ -12,6 +12,11 @@
         android:theme="@style/Theme.Mishell">
 
         <activity
+            android:name=".ArticleReaderActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+
+        <activity
             android:name=".PlaceholderActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape" />

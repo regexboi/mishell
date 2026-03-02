@@ -16,6 +16,7 @@ object AppSettings {
     private const val KEY_BACKEND_MODE = "backend_mode"
     private const val KEY_CLAWDIA_GATEWAY_URL = "clawdia_gateway_url"
     private const val KEY_INSTANCE_ID = "app_instance_id"
+    private const val KEY_NEON_CONNECTION_STRING = "neon_connection_string"
 
     private const val VALUE_BACKEND_MISHELL = "mishell"
     private const val VALUE_BACKEND_CLAWDIA = "clawdia"
@@ -102,6 +103,27 @@ object AppSettings {
     fun setClawdiaPassword(context: Context, value: String) {
         securePrefs(context).edit {
             putString("clawdia_gateway_password", value.trim())
+        }
+    }
+
+    fun getNeonConnectionString(context: Context): String {
+        val secure = securePrefs(context).getString(KEY_NEON_CONNECTION_STRING, null)
+            ?.trim()
+            .orEmpty()
+        if (secure.isNotEmpty()) {
+            return secure
+        }
+
+        val fallback = BuildConfig.NEON_STRING.trim()
+        if (fallback.isNotEmpty()) {
+            setNeonConnectionString(context, fallback)
+        }
+        return fallback
+    }
+
+    fun setNeonConnectionString(context: Context, value: String) {
+        securePrefs(context).edit {
+            putString(KEY_NEON_CONNECTION_STRING, value.trim())
         }
     }
 

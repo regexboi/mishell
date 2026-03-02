@@ -5,42 +5,111 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_dashboard"
-    android:padding="20dp"
+    android:padding="12dp"
     tools:context=".PlaceholderActivity">
-
-    <TextView
-        android:id="@+id/placeholder_text"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_neon_panel"
-        android:paddingHorizontal="28dp"
-        android:paddingVertical="22dp"
-        android:textColor="@color/cyber_text"
-        android:textSize="34sp"
-        android:textStyle="bold"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:text="Placeholder 1" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/back_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="18dp"
         android:background="@drawable/card_neon_selector"
         android:insetLeft="0dp"
         android:insetTop="0dp"
         android:insetRight="0dp"
         android:insetBottom="0dp"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="10dp"
+        android:minWidth="0dp"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="8dp"
         android:text="@string/placeholder_back"
         android:textAllCaps="false"
         android:textColor="@color/cyber_cyan"
-        app:layout_constraintEnd_toEndOf="@+id/placeholder_text"
-        app:layout_constraintStart_toStartOf="@+id/placeholder_text"
-        app:layout_constraintTop_toBottomOf="@+id/placeholder_text" />
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/title_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_neon_panel"
+        android:gravity="start|center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:textColor="@color/cyber_cyan"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toStartOf="@+id/back_button"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="RSS Summaries" />
+
+    <TextView
+        android:id="@+id/subtitle_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="monospace"
+        android:lineSpacingExtra="2dp"
+        android:textColor="@color/cyber_text_dim"
+        android:textSize="12sp"
+        app:layout_constraintEnd_toStartOf="@+id/back_button"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/title_text"
+        tools:text="Live summary snippets from your RSS database." />
+
+    <ProgressBar
+        android:id="@+id/loading_indicator"
+        style="?android:attr/progressBarStyleLarge"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginTop="10dp"
+        android:indeterminate="true"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/subtitle_text" />
+
+    <TextView
+        android:id="@+id/status_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:textColor="@color/cyber_text_dim"
+        android:textSize="12sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/loading_indicator"
+        tools:text="Loading..." />
+
+    <ListView
+        android:id="@+id/content_list"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="6dp"
+        android:divider="@android:color/transparent"
+        android:dividerHeight="4dp"
+        android:paddingBottom="4dp"
+        android:paddingTop="4dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/status_text" />
+
+    <TextView
+        android:id="@+id/placeholder_text"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/bg_neon_panel"
+        android:gravity="center"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="16dp"
+        android:textColor="@color/cyber_text"
+        android:textSize="17sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/subtitle_text"
+        tools:text="Placeholder fallback" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

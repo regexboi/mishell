@@ -81,6 +81,9 @@ class MainActivity : AppCompatActivity() {
     private var activeSttCall: Call? = null
     private var activeLlmCall: Call? = null
     private var activeClawdiaStream: ClawdiaGatewayClient.CancelableStream? = null
+    private var rssTickerJob: Job? = null
+    private var rssTickerTitles: List<String> = emptyList()
+    private var rssTickerOffset = 0
     private var isTerminalFullscreen = false
     @Volatile
     private var isSquirtMode = false
@@ -153,6 +156,7 @@ class MainActivity : AppCompatActivity() {
         renderSquirtPlaceholder()
         binding.bottomBanner.isSelected = true
         setWisprTextMode(AppSettings.isWisprTextModeEnabled(this), animate = false)
+        startRssTicker()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -1299,7 +1303,62 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun startRssTicker() {
+        if (rssTickerJob?.isActive == true) {
+            return
+        }
+        rssTickerJob = lifecycleScope.launch {
+            while (isActive) {
+                val titles = runCatching {
+                    RssRepository.fetchArticles(this@MainActivity, limit = 120)
+                        .mapNotNull { it.title.takeIf(String::isNotBlank) }
+                        .distinct()
+                }.getOrNull().orEmpty()
+
+                if (titles.isNotEmpty()) {
+                    rssTickerTitles = titles
+                    if (rssTickerOffset >= rssTickerTitles.size) {
+                        rssTickerOffset = 0
+                    }
+                    renderRssTickerWindow()
+                } else if (rssTickerTitles.isEmpty()) {
+                    binding.bottomBanner.text = getString(R.string.banner_text)
+                }
+
+                repeat(8) {
+                    delay(8_000L)
+                    if (!isActive) return@launch
+                    if (rssTickerTitles.isNotEmpty()) {
+                        rssTickerOffset = (rssTickerOffset + 1) % rssTickerTitles.size
+                        renderRssTickerWindow()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun renderRssTickerWindow() {
+        if (rssTickerTitles.isEmpty()) {
+            return
+        }
+        val itemCount = min(14, rssTickerTitles.size)
+        val windowItems = buildList(itemCount) {
+            for (index in 0 until itemCount) {
+                val position = (rssTickerOffset + index) % rssTickerTitles.size
+                add(rssTickerTitles[position])
+            }
+        }
+        binding.bottomBanner.text = buildString {
+            append(getString(R.string.banner_rss_prefix))
+            append(windowItems.joinToString(separator = " // "))
+            append(" //")
+        }
+        binding.bottomBanner.isSelected = true
+    }
+
     override fun onDestroy() {
+        rssTickerJob?.cancel()
+        rssTickerJob = null
         cancelActiveWork()
         if (isRecording) {
             runCatching { mediaRecorder?.stop() }
