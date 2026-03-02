@@ -26,6 +26,9 @@ Tap MIC again to transcribe.</string>
     <string name="err_backend_http_5xx">Voice backend returned server error HTTP %1$d. Please try again shortly.</string>
     <string name="err_request_failed">Voice request failed.</string>
     <string name="squirt_speed_label">%1$d WPM</string>
+    <string name="squirt_back_5">Back 5</string>
+    <string name="squirt_back_15">Back 15</string>
+    <string name="squirt_progress_format">%1$d/%2$d</string>
     <string name="mishell_avatar">MISHELL</string>
     <string name="mishell_role">PURPLE WITCH AI</string>
     <string name="banner_text">// BOOT COMPLETE // MISHELL ONLINE // VOICE SHELL READY // CONNECTING STARLINK NODE //</string>

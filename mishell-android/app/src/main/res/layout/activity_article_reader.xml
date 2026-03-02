@@ -170,6 +170,31 @@
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <LinearLayout
+            android:id="@+id/squirt_jump_controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/squirt_back_15"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="8dp"
+                android:minWidth="0dp"
+                android:text="@string/squirt_back_15"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/squirt_back_5"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:minWidth="0dp"
+                android:text="@string/squirt_back_5"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/squirt_speed_controls"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -200,6 +225,33 @@
                 android:layout_height="40dp"
                 android:text="+"
                 android:textSize="18sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/squirt_scrubber_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingTop="6dp">
+
+            <SeekBar
+                android:id="@+id/squirt_scrubber"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:max="1"
+                android:progress="0" />
+
+            <TextView
+                android:id="@+id/squirt_progress_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:fontFamily="monospace"
+                android:textColor="@color/cyber_text_dim"
+                android:textSize="12sp"
+                tools:text="0/120" />
         </LinearLayout>
     </LinearLayout>
 

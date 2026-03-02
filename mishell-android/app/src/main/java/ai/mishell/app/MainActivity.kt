@@ -14,6 +14,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.InputMethodManager
+import android.widget.SeekBar
 import androidx.activity.OnBackPressedCallback
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,6 +48,7 @@ import java.io.IOException
 import java.util.ArrayDeque
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
 
@@ -93,6 +95,9 @@ class MainActivity : AppCompatActivity() {
     private var squirtPlaybackJob: Job? = null
     private var latestTranscript = ""
     private var squirtWordTextSizeSp = SQUIRT_BASE_TEXT_SIZE_SP
+    private var squirtPlaybackIndex = 0
+    private var squirtLastShownIndex = -1
+    private var isScrubbingSquirt = false
     private lateinit var terminalTapDetector: GestureDetector
     private val defaultConstraints = ConstraintSet()
     private val fullscreenConstraints = ConstraintSet()
@@ -101,8 +106,8 @@ class MainActivity : AppCompatActivity() {
     private var isWisprTextMode = false
     private val assistantTextLock = Any()
     private val assistantTextBuffer = StringBuilder(1024)
-    private val squirtQueueLock = Any()
-    private val squirtQueue = ArrayDeque<String>()
+    private val squirtWordsLock = Any()
+    private val squirtWords = ArrayList<String>(256)
     private val squirtCarry = StringBuilder(128)
     private val tmpViewLocation = IntArray(2)
     private val streamDetailsLock = Any()
@@ -118,6 +123,11 @@ class MainActivity : AppCompatActivity() {
     private data class TerminalStreamBlock(
         val type: TerminalStreamBlockType,
         val text: StringBuilder
+    )
+
+    private data class SquirtPlaybackFrame(
+        val index: Int,
+        val word: String
     )
 
     private val audioPermissionLauncher = registerForActivityResult(
@@ -238,8 +248,38 @@ class MainActivity : AppCompatActivity() {
         binding.squirtSpeedUp.setOnClickListener {
             adjustSquirtSpeed(SQUIRT_WPM_STEP)
         }
+        binding.squirtBack5.setOnClickListener {
+            moveSquirtPlaybackBack(5)
+        }
+        binding.squirtBack15.setOnClickListener {
+            moveSquirtPlaybackBack(15)
+        }
+        binding.squirtScrubber.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                if (!fromUser) {
+                    return
+                }
+                isScrubbingSquirt = true
+                val totalWords = getSquirtWordCount()
+                val clamped = progress.coerceIn(0, totalWords)
+                binding.squirtProgressLabel.text =
+                    getString(R.string.squirt_progress_format, clamped, totalWords)
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) {
+                isScrubbingSquirt = true
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                val totalWords = getSquirtWordCount()
+                val targetIndex = seekBar.progress.coerceIn(0, totalWords)
+                isScrubbingSquirt = false
+                seekSquirtPlayback(targetIndex, renderPreview = true)
+            }
+        })
         applySquirtWordTextSize(SQUIRT_BASE_TEXT_SIZE_SP)
         updateSquirtSpeedLabel()
+        updateSquirtProgressUi()
     }
 
     private fun setupTerminalFullscreenToggle() {
@@ -496,7 +536,7 @@ class MainActivity : AppCompatActivity() {
         binding.squirtContainer.visibility = if (enabled) View.VISIBLE else View.GONE
 
         if (enabled) {
-            rebuildSquirtQueueFromAssistantText()
+            rebuildSquirtWordsFromAssistantText()
             ensureSquirtPlaybackLoop()
         } else {
             squirtPlaybackJob?.cancel()
@@ -515,6 +555,62 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateSquirtSpeedLabel() {
         binding.squirtSpeedLabel.text = getString(R.string.squirt_speed_label, squirtTargetWpm)
+    }
+
+    private fun moveSquirtPlaybackBack(wordCount: Int) {
+        val targetIndex = synchronized(squirtWordsLock) {
+            (squirtPlaybackIndex - wordCount).coerceAtLeast(0)
+        }
+        seekSquirtPlayback(targetIndex, renderPreview = true)
+    }
+
+    private fun seekSquirtPlayback(targetIndex: Int, renderPreview: Boolean) {
+        val previewWord = synchronized(squirtWordsLock) {
+            val totalWords = squirtWords.size
+            val clamped = targetIndex.coerceIn(0, totalWords)
+            squirtPlaybackIndex = clamped
+            squirtLastShownIndex = clamped - 1
+            if (renderPreview && clamped < totalWords) squirtWords[clamped] else null
+        }
+
+        if (isSquirtMode) {
+            if (previewWord != null) {
+                renderSquirtWord(previewWord)
+            } else {
+                renderSquirtPlaceholder()
+            }
+            ensureSquirtPlaybackLoop()
+        }
+        updateSquirtProgressUi()
+    }
+
+    private fun getSquirtWordCount(): Int {
+        synchronized(squirtWordsLock) {
+            return squirtWords.size
+        }
+    }
+
+    private fun postSquirtProgressUiRefresh() {
+        runOnUiThread {
+            if (::binding.isInitialized) {
+                updateSquirtProgressUi()
+            }
+        }
+    }
+
+    private fun updateSquirtProgressUi() {
+        val (position, totalWords) = synchronized(squirtWordsLock) {
+            val total = squirtWords.size
+            squirtPlaybackIndex = squirtPlaybackIndex.coerceIn(0, total)
+            squirtLastShownIndex = squirtLastShownIndex.coerceIn(-1, total - 1)
+            (squirtLastShownIndex + 1).coerceIn(0, total) to total
+        }
+        binding.squirtScrubber.max = max(1, totalWords)
+        if (!isScrubbingSquirt) {
+            binding.squirtScrubber.progress = position
+            binding.squirtProgressLabel.text =
+                getString(R.string.squirt_progress_format, position, totalWords)
+        }
     }
 
     private fun ensureAudioPermissionAndStart() {
@@ -769,7 +865,7 @@ class MainActivity : AppCompatActivity() {
         appendTerminalAssistantDelta(delta)
         if (isSquirtMode) {
             appendAssistantChunk(delta)
-            enqueueSquirtWords(delta)
+            appendSquirtWords(delta)
             if (squirtPlaybackJob?.isActive != true) {
                 runOnUiThread {
                     ensureSquirtPlaybackLoop()
@@ -967,13 +1063,21 @@ class MainActivity : AppCompatActivity() {
         synchronized(terminalStreamLock) {
             terminalStreamBlocks.clear()
         }
-        synchronized(squirtQueueLock) {
-            squirtQueue.clear()
+        synchronized(squirtWordsLock) {
+            squirtWords.clear()
             squirtCarry.setLength(0)
+            squirtPlaybackIndex = 0
+            squirtLastShownIndex = -1
         }
         isAssistantStreamComplete = false
         squirtPlaybackJob?.cancel()
         squirtPlaybackJob = null
+        postSquirtProgressUiRefresh()
+        runOnUiThread {
+            if (::binding.isInitialized) {
+                renderSquirtPlaceholder()
+            }
+        }
     }
 
     private fun appendAssistantChunk(chunk: String) {
@@ -995,30 +1099,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun rebuildSquirtQueueFromAssistantText() {
-        synchronized(squirtQueueLock) {
-            squirtQueue.clear()
+    private fun rebuildSquirtWordsFromAssistantText() {
+        synchronized(squirtWordsLock) {
+            squirtWords.clear()
             squirtCarry.setLength(0)
+            squirtPlaybackIndex = 0
+            squirtLastShownIndex = -1
         }
-        enqueueSquirtWords(getAssistantTextSnapshot())
+        appendSquirtWords(getAssistantTextSnapshot())
         if (isAssistantStreamComplete) {
             flushSquirtCarryWord()
         }
         renderSquirtPlaceholder()
+        updateSquirtProgressUi()
     }
 
-    private fun enqueueSquirtWords(textChunk: String) {
+    private fun appendSquirtWords(textChunk: String) {
         if (textChunk.isEmpty()) {
             return
         }
-        synchronized(squirtQueueLock) {
+        synchronized(squirtWordsLock) {
             squirtCarry.append(textChunk)
             var tokenStart = 0
             var cursor = 0
             while (cursor < squirtCarry.length) {
                 if (squirtCarry[cursor].isWhitespace()) {
                     if (tokenStart < cursor) {
-                        squirtQueue.addLast(squirtCarry.substring(tokenStart, cursor))
+                        squirtWords.add(squirtCarry.substring(tokenStart, cursor))
                     }
                     while (cursor < squirtCarry.length && squirtCarry[cursor].isWhitespace()) {
                         cursor += 1
@@ -1034,14 +1141,20 @@ class MainActivity : AppCompatActivity() {
                 squirtCarry.append(remaining)
             }
         }
+        postSquirtProgressUiRefresh()
     }
 
     private fun flushSquirtCarryWord() {
-        synchronized(squirtQueueLock) {
+        var didAddWord = false
+        synchronized(squirtWordsLock) {
             if (squirtCarry.isNotEmpty()) {
-                squirtQueue.addLast(squirtCarry.toString())
+                squirtWords.add(squirtCarry.toString())
                 squirtCarry.setLength(0)
+                didAddWord = true
             }
+        }
+        if (didAddWord) {
+            postSquirtProgressUiRefresh()
         }
     }
 
@@ -1050,28 +1163,33 @@ class MainActivity : AppCompatActivity() {
             return
         }
         squirtPlaybackJob = lifecycleScope.launch(Dispatchers.Main.immediate) {
-            var shownWords = 0
             while (isActive && isSquirtMode) {
-                val nextWord = pollNextSquirtWord()
-                if (nextWord == null) {
+                val frame = pollNextSquirtWord()
+                if (frame == null) {
                     if (isAssistantStreamComplete) {
                         break
                     }
                     delay(8L)
                     continue
                 }
-
-                shownWords += 1
-                renderSquirtWord(nextWord)
-                delay(computeSquirtDelayMs(nextWord, shownWords))
+                renderSquirtWord(frame.word)
+                updateSquirtProgressUi()
+                delay(computeSquirtDelayMs(frame.word, frame.index + 1))
             }
+            updateSquirtProgressUi()
             squirtPlaybackJob = null
         }
     }
 
-    private fun pollNextSquirtWord(): String? {
-        synchronized(squirtQueueLock) {
-            return if (squirtQueue.isEmpty()) null else squirtQueue.removeFirst()
+    private fun pollNextSquirtWord(): SquirtPlaybackFrame? {
+        synchronized(squirtWordsLock) {
+            if (squirtPlaybackIndex >= squirtWords.size) {
+                return null
+            }
+            val index = squirtPlaybackIndex
+            squirtPlaybackIndex += 1
+            squirtLastShownIndex = index
+            return SquirtPlaybackFrame(index, squirtWords[index])
         }
     }
 

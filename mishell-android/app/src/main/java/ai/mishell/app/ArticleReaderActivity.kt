@@ -7,6 +7,7 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
+import android.widget.SeekBar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -18,11 +19,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.ArrayDeque
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
 
@@ -31,13 +32,21 @@ class ArticleReaderActivity : AppCompatActivity() {
     private var squirtTargetWpm = SQUIRT_DEFAULT_WPM
     private var squirtWordTextSizeSp = SQUIRT_BASE_TEXT_SIZE_SP
     private var squirtPlaybackJob: Job? = null
+    private var squirtPlaybackIndex = 0
+    private var squirtLastShownIndex = -1
+    private var isScrubbingSquirt = false
     private var articleBodyText = ""
-    private val squirtQueueLock = Any()
-    private val squirtQueue = ArrayDeque<String>()
+    private val squirtWordsLock = Any()
+    private val squirtWords = ArrayList<String>(256)
     private val squirtCarry = StringBuilder(256)
     private val tmpViewLocation = IntArray(2)
     private lateinit var binding: ActivityArticleReaderBinding
     private var externalLink: String? = null
+
+    private data class SquirtPlaybackFrame(
+        val index: Int,
+        val word: String
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,9 +58,35 @@ class ArticleReaderActivity : AppCompatActivity() {
         binding.openLinkButton.setOnClickListener { openExternalLink() }
         binding.squirtSpeedDown.setOnClickListener { adjustSquirtSpeed(-SQUIRT_WPM_STEP) }
         binding.squirtSpeedUp.setOnClickListener { adjustSquirtSpeed(SQUIRT_WPM_STEP) }
+        binding.squirtBack5.setOnClickListener { moveSquirtPlaybackBack(5) }
+        binding.squirtBack15.setOnClickListener { moveSquirtPlaybackBack(15) }
+        binding.squirtScrubber.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                if (!fromUser) {
+                    return
+                }
+                isScrubbingSquirt = true
+                val totalWords = getSquirtWordCount()
+                val clamped = progress.coerceIn(0, totalWords)
+                binding.squirtProgressLabel.text =
+                    getString(R.string.squirt_progress_format, clamped, totalWords)
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) {
+                isScrubbingSquirt = true
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                val totalWords = getSquirtWordCount()
+                val targetIndex = seekBar.progress.coerceIn(0, totalWords)
+                isScrubbingSquirt = false
+                seekSquirtPlayback(targetIndex, renderPreview = true)
+            }
+        })
         applySquirtWordTextSize(SQUIRT_BASE_TEXT_SIZE_SP)
         updateSquirtSpeedLabel()
         renderSquirtPlaceholder()
+        updateSquirtProgressUi()
 
         val articleId = intent.getStringExtra(EXTRA_ARTICLE_ID)?.trim().orEmpty()
         if (articleId.isEmpty()) {
@@ -109,7 +144,7 @@ class ArticleReaderActivity : AppCompatActivity() {
                     if (externalLink != null) View.VISIBLE else View.GONE
 
                 if (isSquirtMode) {
-                    rebuildSquirtQueueFromArticle()
+                    rebuildSquirtWordsFromArticle()
                     ensureSquirtPlaybackLoop()
                 }
             }.onFailure { error ->
@@ -164,7 +199,7 @@ class ArticleReaderActivity : AppCompatActivity() {
         binding.contentScroll.visibility = if (enabled) View.GONE else View.VISIBLE
         binding.squirtContainer.visibility = if (enabled) View.VISIBLE else View.GONE
         if (enabled) {
-            rebuildSquirtQueueFromArticle()
+            rebuildSquirtWordsFromArticle()
             ensureSquirtPlaybackLoop()
         } else {
             squirtPlaybackJob?.cancel()
@@ -181,28 +216,78 @@ class ArticleReaderActivity : AppCompatActivity() {
         binding.squirtSpeedLabel.text = getString(R.string.squirt_speed_label, squirtTargetWpm)
     }
 
-    private fun rebuildSquirtQueueFromArticle() {
-        synchronized(squirtQueueLock) {
-            squirtQueue.clear()
-            squirtCarry.setLength(0)
+    private fun moveSquirtPlaybackBack(wordCount: Int) {
+        val targetIndex = synchronized(squirtWordsLock) {
+            (squirtPlaybackIndex - wordCount).coerceAtLeast(0)
         }
-        enqueueSquirtWords(articleBodyText)
-        flushSquirtCarryWord()
-        renderSquirtPlaceholder()
+        seekSquirtPlayback(targetIndex, renderPreview = true)
     }
 
-    private fun enqueueSquirtWords(textChunk: String) {
+    private fun seekSquirtPlayback(targetIndex: Int, renderPreview: Boolean) {
+        val previewWord = synchronized(squirtWordsLock) {
+            val totalWords = squirtWords.size
+            val clamped = targetIndex.coerceIn(0, totalWords)
+            squirtPlaybackIndex = clamped
+            squirtLastShownIndex = clamped - 1
+            if (renderPreview && clamped < totalWords) squirtWords[clamped] else null
+        }
+        if (isSquirtMode) {
+            if (previewWord != null) {
+                renderSquirtWord(previewWord)
+            } else {
+                renderSquirtPlaceholder()
+            }
+            ensureSquirtPlaybackLoop()
+        }
+        updateSquirtProgressUi()
+    }
+
+    private fun getSquirtWordCount(): Int {
+        synchronized(squirtWordsLock) {
+            return squirtWords.size
+        }
+    }
+
+    private fun updateSquirtProgressUi() {
+        val (position, totalWords) = synchronized(squirtWordsLock) {
+            val total = squirtWords.size
+            squirtPlaybackIndex = squirtPlaybackIndex.coerceIn(0, total)
+            squirtLastShownIndex = squirtLastShownIndex.coerceIn(-1, total - 1)
+            (squirtLastShownIndex + 1).coerceIn(0, total) to total
+        }
+        binding.squirtScrubber.max = max(1, totalWords)
+        if (!isScrubbingSquirt) {
+            binding.squirtScrubber.progress = position
+            binding.squirtProgressLabel.text =
+                getString(R.string.squirt_progress_format, position, totalWords)
+        }
+    }
+
+    private fun rebuildSquirtWordsFromArticle() {
+        synchronized(squirtWordsLock) {
+            squirtWords.clear()
+            squirtCarry.setLength(0)
+            squirtPlaybackIndex = 0
+            squirtLastShownIndex = -1
+        }
+        appendSquirtWords(articleBodyText)
+        flushSquirtCarryWord()
+        renderSquirtPlaceholder()
+        updateSquirtProgressUi()
+    }
+
+    private fun appendSquirtWords(textChunk: String) {
         if (textChunk.isEmpty()) {
             return
         }
-        synchronized(squirtQueueLock) {
+        synchronized(squirtWordsLock) {
             squirtCarry.append(textChunk)
             var tokenStart = 0
             var cursor = 0
             while (cursor < squirtCarry.length) {
                 if (squirtCarry[cursor].isWhitespace()) {
                     if (tokenStart < cursor) {
-                        squirtQueue.addLast(squirtCarry.substring(tokenStart, cursor))
+                        squirtWords.add(squirtCarry.substring(tokenStart, cursor))
                     }
                     while (cursor < squirtCarry.length && squirtCarry[cursor].isWhitespace()) {
                         cursor += 1
@@ -221,9 +306,9 @@ class ArticleReaderActivity : AppCompatActivity() {
     }
 
     private fun flushSquirtCarryWord() {
-        synchronized(squirtQueueLock) {
+        synchronized(squirtWordsLock) {
             if (squirtCarry.isNotEmpty()) {
-                squirtQueue.addLast(squirtCarry.toString())
+                squirtWords.add(squirtCarry.toString())
                 squirtCarry.setLength(0)
             }
         }
@@ -234,26 +319,32 @@ class ArticleReaderActivity : AppCompatActivity() {
             return
         }
         squirtPlaybackJob = lifecycleScope.launch(Dispatchers.Main.immediate) {
-            var shownWords = 0
             while (isActive && isSquirtMode) {
-                val nextWord = pollNextSquirtWord()
-                if (nextWord == null) {
+                val frame = pollNextSquirtWord()
+                if (frame == null) {
                     break
                 }
-                shownWords += 1
-                renderSquirtWord(nextWord)
-                delay(computeSquirtDelayMs(nextWord, shownWords))
+                renderSquirtWord(frame.word)
+                updateSquirtProgressUi()
+                delay(computeSquirtDelayMs(frame.word, frame.index + 1))
             }
             if (isSquirtMode) {
                 renderSquirtPlaceholder()
             }
+            updateSquirtProgressUi()
             squirtPlaybackJob = null
         }
     }
 
-    private fun pollNextSquirtWord(): String? {
-        synchronized(squirtQueueLock) {
-            return if (squirtQueue.isEmpty()) null else squirtQueue.removeFirst()
+    private fun pollNextSquirtWord(): SquirtPlaybackFrame? {
+        synchronized(squirtWordsLock) {
+            if (squirtPlaybackIndex >= squirtWords.size) {
+                return null
+            }
+            val index = squirtPlaybackIndex
+            squirtPlaybackIndex += 1
+            squirtLastShownIndex = index
+            return SquirtPlaybackFrame(index, squirtWords[index])
         }
     }
 
