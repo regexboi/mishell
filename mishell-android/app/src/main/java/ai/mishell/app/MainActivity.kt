@@ -46,6 +46,7 @@ import java.io.File
 import java.io.IOException
 import java.util.ArrayDeque
 import java.util.UUID
+import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToLong
 
@@ -62,6 +63,8 @@ class MainActivity : AppCompatActivity() {
         private const val SQUIRT_BASE_TEXT_SIZE_SP = 40f
         private const val MAX_STREAM_DETAIL_LINES = 120
         private const val MAX_TERMINAL_STREAM_BLOCKS = 160
+        private const val TERMINAL_SWIPE_MIN_DISTANCE_DP = 72f
+        private const val TERMINAL_SWIPE_MIN_VELOCITY_DP = 240f
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -299,8 +302,8 @@ class MainActivity : AppCompatActivity() {
         wisprFullscreenConstraints.connect(
             binding.diagnosticPanel.id,
             ConstraintSet.BOTTOM,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.BOTTOM
+            binding.wisprInputBar.id,
+            ConstraintSet.TOP
         )
         wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.START, 0)
         wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.END, 0)
@@ -318,6 +321,43 @@ class MainActivity : AppCompatActivity() {
                         return true
                     }
                     return false
+                }
+
+                override fun onFling(
+                    e1: MotionEvent?,
+                    e2: MotionEvent,
+                    velocityX: Float,
+                    velocityY: Float
+                ): Boolean {
+                    val start = e1 ?: return false
+                    if (!shouldHandleTerminalSwipe(start, e2)) {
+                        return false
+                    }
+
+                    val deltaX = e2.rawX - start.rawX
+                    val deltaY = e2.rawY - start.rawY
+                    val density = resources.displayMetrics.density
+                    val minDistancePx = TERMINAL_SWIPE_MIN_DISTANCE_DP * density
+                    val minVelocityPx = TERMINAL_SWIPE_MIN_VELOCITY_DP * density
+                    if (
+                        abs(deltaX) < minDistancePx ||
+                        abs(velocityX) < minVelocityPx ||
+                        abs(deltaX) <= abs(deltaY)
+                    ) {
+                        return false
+                    }
+
+                    return when {
+                        deltaX < 0f && !isTerminalFullscreen -> {
+                            setTerminalFullscreen(true)
+                            true
+                        }
+                        deltaX > 0f && isTerminalFullscreen -> {
+                            setTerminalFullscreen(false)
+                            true
+                        }
+                        else -> false
+                    }
                 }
             }
         )
@@ -361,6 +401,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun shouldHandleTerminalSwipe(startEvent: MotionEvent, endEvent: MotionEvent): Boolean {
+        return shouldHandleTerminalSingleTap(startEvent.rawX, startEvent.rawY) &&
+            shouldHandleTerminalSingleTap(endEvent.rawX, endEvent.rawY)
+    }
+
     private fun isPointInsideViewRaw(view: View, rawX: Float, rawY: Float): Boolean {
         if (view.visibility != View.VISIBLE || view.width == 0 || view.height == 0) {
             return false
@@ -402,7 +447,7 @@ class MainActivity : AppCompatActivity() {
         if (fullscreen) {
             binding.iconGrid.visibility = View.GONE
             binding.bottomBanner.visibility = View.GONE
-            binding.wisprInputBar.visibility = View.GONE
+            binding.wisprInputBar.visibility = if (isWisprTextMode) View.VISIBLE else View.GONE
             binding.rightStack.visibility = View.GONE
         } else {
             binding.iconGrid.visibility = View.VISIBLE
