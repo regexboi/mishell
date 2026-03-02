@@ -793,6 +793,7 @@ class MainActivity : AppCompatActivity() {
         cancelButton.setOnClickListener { dialog.dismiss() }
 
         dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
             dialog.window?.setSoftInputMode(
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
             )

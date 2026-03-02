@@ -3,6 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@drawable/bg_neon_panel"
     android:orientation="vertical"
     android:padding="16dp">
 
@@ -10,7 +11,7 @@
         android:id="@+id/wispr_compose_input"
         android:layout_width="match_parent"
         android:layout_height="180dp"
-        android:background="@drawable/bg_status_chip"
+        android:background="@drawable/bg_wispr_compose_input"
         android:gravity="top|start"
         android:hint="@string/wispr_modal_hint"
         android:imeOptions="actionSend|flagNoExtractUi"
@@ -26,23 +27,18 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:gravity="end"
         android:orientation="horizontal">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/wispr_compose_cancel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/wispr_modal_cancel"
-            android:textAllCaps="false" />
+            style="@style/WisprComposeButtonCancel"
+            android:text="@string/wispr_modal_cancel" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/wispr_compose_send"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            style="@style/WisprComposeButtonSend"
             android:layout_marginStart="8dp"
-            android:text="@string/wispr_send"
-            android:textAllCaps="false" />
+            android:text="@string/wispr_send" />
     </LinearLayout>
 
 </LinearLayout>
