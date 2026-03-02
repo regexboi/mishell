@@ -46,6 +46,20 @@ object RssRepository {
         val link: String?
     )
 
+    data class MeetingListItem(
+        val eventId: String,
+        val title: String,
+        val organizerName: String?,
+        val organizerEmail: String?,
+        val attendeeNames: List<String>,
+        val startsAtUtc: Instant?,
+        val endsAtUtc: Instant?,
+        val room: String?,
+        val locationDisplayName: String?,
+        val descriptionPreview: String?,
+        val webLink: String?
+    )
+
     suspend fun fetchSummaries(context: Context, limit: Int = 200): List<SummaryItem> =
         withContext(Dispatchers.IO) {
             queryDb(context) { connection ->
@@ -161,6 +175,58 @@ object RssRepository {
             }
         }
 
+    suspend fun fetchUpcomingMeetings(context: Context): List<MeetingListItem> =
+        withContext(Dispatchers.IO) {
+            queryDb(context) { connection ->
+                connection.prepareStatement(
+                    """
+                    select
+                        event_id,
+                        title,
+                        sender_name,
+                        sender_email,
+                        attendee_names,
+                        starts_at_utc,
+                        ends_at_utc,
+                        room,
+                        location ->> 'displayName' as location_display_name,
+                        description_preview,
+                        web_link
+                    from public.o365_calendar_events
+                    where starts_at_utc >= now()
+                      and coalesce(is_cancelled, false) = false
+                    order by starts_at_utc asc
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.executeQuery().use { rs ->
+                        buildList {
+                            while (rs.next()) {
+                                val eventId = rs.getStringOrNull("event_id") ?: continue
+                                val title = rs.getStringOrNull("title")
+                                    .orEmpty()
+                                    .ifBlank { "(untitled meeting)" }
+                                add(
+                                    MeetingListItem(
+                                        eventId = eventId,
+                                        title = title,
+                                        organizerName = rs.getStringOrNull("sender_name"),
+                                        organizerEmail = rs.getStringOrNull("sender_email"),
+                                        attendeeNames = rs.getStringListOrEmpty("attendee_names"),
+                                        startsAtUtc = rs.getInstantOrNull("starts_at_utc"),
+                                        endsAtUtc = rs.getInstantOrNull("ends_at_utc"),
+                                        room = rs.getStringOrNull("room"),
+                                        locationDisplayName = rs.getStringOrNull("location_display_name"),
+                                        descriptionPreview = rs.getStringOrNull("description_preview"),
+                                        webLink = rs.getStringOrNull("web_link")
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
     private fun <T> queryDb(context: Context, block: (java.sql.Connection) -> T): T {
         val raw = AppSettings.getNeonConnectionString(context).trim()
         check(raw.isNotEmpty()) { "NEON_STRING is missing" }
@@ -245,5 +311,27 @@ object RssRepository {
     private fun ResultSet.getInstantOrNull(column: String): Instant? {
         val timestamp = getTimestamp(column) ?: return null
         return timestamp.toInstant()
+    }
+
+    private fun ResultSet.getStringListOrEmpty(column: String): List<String> {
+        val sqlArray = getArray(column) ?: return emptyList()
+        return try {
+            val arrayValue = sqlArray.array
+            when (arrayValue) {
+                is Array<*> -> {
+                    arrayValue.mapNotNull { value ->
+                        (value as? String)?.trim()?.takeIf { it.isNotEmpty() }
+                    }
+                }
+                is Collection<*> -> {
+                    arrayValue.mapNotNull { value ->
+                        (value as? String)?.trim()?.takeIf { it.isNotEmpty() }
+                    }
+                }
+                else -> emptyList()
+            }
+        } finally {
+            sqlArray.free()
+        }
     }
 }

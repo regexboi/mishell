@@ -38,6 +38,7 @@ class PlaceholderActivity : AppCompatActivity() {
         when (number) {
             1 -> setupSummariesScreen()
             2 -> setupArticleListScreen()
+            3 -> setupUpcomingMeetingsScreen()
             else -> setupFallbackScreen(number)
         }
     }
@@ -162,6 +163,50 @@ class PlaceholderActivity : AppCompatActivity() {
         binding.placeholderText.text = getString(R.string.placeholder_label, number)
     }
 
+    private fun setupUpcomingMeetingsScreen() {
+        binding.titleText.text = getString(R.string.meetings_title)
+        binding.subtitleText.visibility = View.VISIBLE
+        binding.subtitleText.text = getString(R.string.meetings_subtitle)
+        binding.placeholderText.visibility = View.GONE
+        binding.contentList.visibility = View.VISIBLE
+        binding.loadingIndicator.visibility = View.VISIBLE
+        binding.statusText.visibility = View.VISIBLE
+        binding.statusText.text = getString(R.string.meetings_status_loading)
+
+        lifecycleScope.launch {
+            runCatching {
+                RssRepository.fetchUpcomingMeetings(this@PlaceholderActivity)
+            }.onSuccess { meetings ->
+                binding.loadingIndicator.visibility = View.GONE
+                if (meetings.isEmpty()) {
+                    binding.statusText.text = getString(R.string.meetings_status_empty)
+                    binding.contentList.visibility = View.GONE
+                    binding.placeholderText.visibility = View.VISIBLE
+                    binding.placeholderText.text = getString(R.string.meetings_status_empty)
+                    return@onSuccess
+                }
+
+                binding.statusText.text =
+                    getString(R.string.meetings_status_loaded, meetings.size)
+                val adapter = MeetingAdapter(this@PlaceholderActivity, meetings)
+                binding.contentList.adapter = adapter
+                binding.contentList.setOnItemClickListener { _, _, position, _ ->
+                    adapter.toggleExpanded(position)
+                }
+            }.onFailure { error ->
+                binding.loadingIndicator.visibility = View.GONE
+                binding.statusText.text =
+                    getString(R.string.meetings_status_error, error.message ?: "unknown error")
+                binding.contentList.visibility = View.GONE
+                binding.placeholderText.visibility = View.VISIBLE
+                binding.placeholderText.text = getString(
+                    R.string.meetings_status_error,
+                    error.message ?: "unknown error"
+                )
+            }
+        }
+    }
+
     private fun startAutoScroll() {
         autoScrollJob?.cancel()
         autoScrollJob = lifecycleScope.launch {
@@ -242,6 +287,114 @@ class PlaceholderActivity : AppCompatActivity() {
             return view
         }
     }
+
+    private class MeetingAdapter(
+        activity: PlaceholderActivity,
+        items: List<RssRepository.MeetingListItem>
+    ) : ArrayAdapter<RssRepository.MeetingListItem>(activity, 0, items) {
+        private val inflater = LayoutInflater.from(activity)
+        private val zoneId = ZoneId.systemDefault()
+        private val dateFormatter = DateTimeFormatter.ofPattern("EEE, MMM d")
+            .withLocale(Locale.getDefault())
+            .withZone(zoneId)
+        private val timeFormatter = DateTimeFormatter.ofPattern("h:mm a")
+            .withLocale(Locale.getDefault())
+            .withZone(zoneId)
+        private val expandedEventIds = linkedSetOf<String>()
+
+        fun toggleExpanded(position: Int) {
+            val eventId = getItem(position)?.eventId ?: return
+            if (!expandedEventIds.add(eventId)) {
+                expandedEventIds.remove(eventId)
+            }
+            notifyDataSetChanged()
+        }
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val view = convertView ?: inflater.inflate(R.layout.item_meeting, parent, false)
+            val item = getItem(position)
+
+            val titleText = view.findViewById<TextView>(R.id.meeting_title)
+            val metaText = view.findViewById<TextView>(R.id.meeting_meta)
+            val detailsText = view.findViewById<TextView>(R.id.meeting_details)
+            val expandHintText = view.findViewById<TextView>(R.id.meeting_expand_hint)
+
+            val title = item?.title.orEmpty()
+            titleText.text = title
+
+            val organizer = item?.organizerName?.takeIf { it.isNotBlank() }
+                ?: item?.organizerEmail?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.meetings_unknown_organizer)
+            val timeRange = item?.let { formatTimeRange(it) }
+                ?: context.getString(R.string.meetings_unknown_time)
+            metaText.text = "$organizer • $timeRange"
+
+            val isExpanded = item?.eventId?.let { expandedEventIds.contains(it) } == true
+            detailsText.visibility = if (isExpanded) View.VISIBLE else View.GONE
+            expandHintText.text = context.getString(
+                if (isExpanded) {
+                    R.string.meetings_collapse_hint
+                } else {
+                    R.string.meetings_expand_hint
+                }
+            )
+            detailsText.text = item?.let { formatDetails(it) }.orEmpty()
+
+            return view
+        }
+
+        private fun formatTimeRange(item: RssRepository.MeetingListItem): String {
+            val start = item.startsAtUtc ?: return context.getString(R.string.meetings_unknown_time)
+            val end = item.endsAtUtc
+            if (end == null) {
+                return "${dateFormatter.format(start)} • ${timeFormatter.format(start)}"
+            }
+            val sameDay = start.atZone(zoneId).toLocalDate() == end.atZone(zoneId).toLocalDate()
+            return if (sameDay) {
+                "${dateFormatter.format(start)} • ${timeFormatter.format(start)} - ${
+                    timeFormatter.format(end)
+                }"
+            } else {
+                "${dateFormatter.format(start)} ${timeFormatter.format(start)} -> ${
+                    dateFormatter.format(end)
+                } ${timeFormatter.format(end)}"
+            }
+        }
+
+        private fun formatDetails(item: RssRepository.MeetingListItem): String {
+            val attendees = item.attendeeNames
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString(", ")
+                ?: context.getString(R.string.meetings_no_attendees)
+            val roomOrLocation = item.room
+                ?: item.locationDisplayName
+                ?: context.getString(R.string.meetings_no_location)
+            val preview = item.descriptionPreview
+                ?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.meetings_no_preview)
+            val webLink = item.webLink
+                ?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.meetings_no_link)
+            return buildString {
+                append(context.getString(R.string.meetings_details_attendees))
+                append(": ")
+                append(attendees)
+                append('\n')
+                append(context.getString(R.string.meetings_details_location))
+                append(": ")
+                append(roomOrLocation)
+                append('\n')
+                append(context.getString(R.string.meetings_details_preview))
+                append(": ")
+                append(preview)
+                append('\n')
+                append(context.getString(R.string.meetings_details_link))
+                append(": ")
+                append(webLink)
+            }
+        }
+    }
+
     companion object {
         const val EXTRA_PLACEHOLDER_NUMBER = "extra_placeholder_number"
     }
