@@ -2,8 +2,13 @@ package ai.mishell.app
 
 import android.Manifest
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.MediaRecorder
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
+import android.os.BatteryManager
 import android.os.Bundle
 import android.transition.AutoTransition
 import android.transition.TransitionManager
@@ -50,7 +55,9 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.ArrayDeque
+import java.time.Duration
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
@@ -74,6 +81,11 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_TERMINAL_STREAM_BLOCKS = 160
         private const val TERMINAL_SWIPE_MIN_DISTANCE_DP = 72f
         private const val TERMINAL_SWIPE_MIN_VELOCITY_DP = 240f
+        private const val TERMINAL_IDLE_REFRESH_INTERVAL_MS = 45_000L
+        private const val TERMINAL_MEETING_REFRESH_INTERVAL_MS = 5 * 60_000L
+        private const val BATTERY_GRAPH_SEGMENTS = 14
+        private const val WIFI_GRAPH_SEGMENTS = 5
+        private const val DIMMED_BRIGHTNESS_THRESHOLD = 0.05f
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -92,8 +104,11 @@ class MainActivity : AppCompatActivity() {
     private var activeClawdiaStream: ClawdiaGatewayClient.CancelableStream? = null
     private var rssTickerJob: Job? = null
     private var homeClockJob: Job? = null
+    private var terminalIdleJob: Job? = null
     private var rssTickerTitles: List<String> = emptyList()
     private var rssTickerOffset = 0
+    private var cachedNextMeetingSummary = ""
+    private var cachedNextMeetingFetchedAt = 0L
     private var isTerminalFullscreen = false
     @Volatile
     private var isSquirtMode = false
@@ -125,6 +140,10 @@ class MainActivity : AppCompatActivity() {
     private val terminalStreamLock = Any()
     private val terminalStreamBlocks = ArrayDeque<TerminalStreamBlock>()
     private val homeClockFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale.US)
+    private val terminalClockFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.US)
+    private val terminalMeetingFormatter = DateTimeFormatter.ofPattern("EEE h:mm a")
+        .withLocale(Locale.getDefault())
+        .withZone(ZoneId.systemDefault())
 
     private enum class TerminalStreamBlockType {
         ASSISTANT,
@@ -139,6 +158,11 @@ class MainActivity : AppCompatActivity() {
     private data class SquirtPlaybackFrame(
         val index: Int,
         val word: String
+    )
+
+    private data class TerminalIdleSnapshot(
+        val leftColumn: String,
+        val rightColumn: String
     )
 
     private val audioPermissionLauncher = registerForActivityResult(
@@ -177,6 +201,7 @@ class MainActivity : AppCompatActivity() {
         renderSquirtPlaceholder()
         binding.bottomBanner.isSelected = true
         setWisprTextMode(AppSettings.isWisprTextModeEnabled(this), animate = false)
+        showTerminalLogo()
         startRssTicker()
     }
 
@@ -192,16 +217,25 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         setWisprTextMode(AppSettings.isWisprTextModeEnabled(this), animate = false)
         onDisplayForegrounded()
+        if (::binding.isInitialized &&
+            binding.terminalIdleContainer.visibility == View.VISIBLE &&
+            !isDisplayDimmedForStats()
+        ) {
+            refreshTerminalIdleShell(forceMeetingRefresh = false)
+        }
     }
 
     override fun onStart() {
         super.onStart()
         startHomeClock()
+        startTerminalIdleRefreshLoop()
     }
 
     override fun onStop() {
         homeClockJob?.cancel()
         homeClockJob = null
+        terminalIdleJob?.cancel()
+        terminalIdleJob = null
         super.onStop()
     }
 
@@ -715,7 +749,7 @@ class MainActivity : AppCompatActivity() {
             isRecording = true
             setMicButtonSelected(true)
             binding.micStatus.text = getString(R.string.mic_listening)
-            binding.terminalOutput.text = getString(R.string.terminal_recording)
+            showTerminalText(getString(R.string.terminal_recording))
         } catch (error: Exception) {
             outputFile.delete()
             releaseRecorder()
@@ -852,7 +886,7 @@ class MainActivity : AppCompatActivity() {
         setMicButtonEnabled(false)
         setWisprInputEnabled(false)
         binding.micStatus.text = getString(R.string.mic_transcribing)
-        binding.terminalOutput.text = getString(R.string.terminal_transcribing)
+        showTerminalText(getString(R.string.terminal_transcribing))
 
         activeWorkJob = lifecycleScope.launch {
             var transcript = ""
@@ -866,7 +900,7 @@ class MainActivity : AppCompatActivity() {
                 if (transcript.isBlank()) {
                     isAssistantStreamComplete = true
                     withContext(Dispatchers.Main.immediate) {
-                        binding.terminalOutput.text = getString(R.string.terminal_empty_transcript)
+                        showTerminalText(getString(R.string.terminal_empty_transcript))
                     }
                     return@launch
                 }
@@ -1396,19 +1430,211 @@ class MainActivity : AppCompatActivity() {
 
     private fun showTerminalError(message: String) {
         val details = buildStreamDetailsSnapshot()
-        binding.terminalOutput.text = buildString {
-            append(getString(R.string.terminal_error, message))
-            if (details.isNotBlank()) {
-                append("\n\n──────── STREAM DETAILS ────────\n")
-                append(details)
+        showTerminalText(
+            buildString {
+                append(getString(R.string.terminal_error, message))
+                if (details.isNotBlank()) {
+                    append("\n\n──────── STREAM DETAILS ────────\n")
+                    append(details)
+                }
+            }
+        )
+        scrollTerminalToBottom()
+    }
+
+    private fun showTerminalText(text: CharSequence) {
+        binding.terminalIdleContainer.visibility = View.GONE
+        binding.terminalOutput.visibility = View.VISIBLE
+        binding.terminalOutput.text = text
+    }
+
+    private fun showTerminalLogo() {
+        binding.terminalIdleContainer.visibility = View.VISIBLE
+        binding.terminalOutput.visibility = View.GONE
+        binding.terminalOutput.text = ""
+        refreshTerminalIdleShell(forceMeetingRefresh = false)
+    }
+
+    private fun startTerminalIdleRefreshLoop() {
+        if (terminalIdleJob?.isActive == true) {
+            return
+        }
+        terminalIdleJob = lifecycleScope.launch(Dispatchers.Main.immediate) {
+            var forceMeetingRefresh = true
+            while (isActive) {
+                val canRefresh = binding.terminalIdleContainer.visibility == View.VISIBLE &&
+                    !isDisplayDimmedForStats()
+                if (canRefresh) {
+                    refreshTerminalIdleShell(forceMeetingRefresh = forceMeetingRefresh)
+                    forceMeetingRefresh = false
+                }
+                delay(TERMINAL_IDLE_REFRESH_INTERVAL_MS)
             }
         }
-        scrollTerminalToBottom()
+    }
+
+    private fun refreshTerminalIdleShell(forceMeetingRefresh: Boolean) {
+        if (!::binding.isInitialized || binding.terminalIdleContainer.visibility != View.VISIBLE) {
+            return
+        }
+        lifecycleScope.launch(Dispatchers.Main.immediate) {
+            if (!isActive || isDisplayDimmedForStats()) {
+                return@launch
+            }
+            val snapshot = withContext(Dispatchers.IO) {
+                buildTerminalIdleSnapshot(forceMeetingRefresh)
+            }
+            if (!isActive || binding.terminalIdleContainer.visibility != View.VISIBLE) {
+                return@launch
+            }
+            binding.terminalShellLeft.text = snapshot.leftColumn
+            binding.terminalShellRight.text = snapshot.rightColumn
+        }
+    }
+
+    private fun isDisplayDimmedForStats(): Boolean {
+        if (!AppSettings.isAlwaysOnUltraDimEnabled(this)) {
+            return false
+        }
+        val brightness = window.attributes.screenBrightness
+        return brightness in 0f..DIMMED_BRIGHTNESS_THRESHOLD
+    }
+
+    private suspend fun buildTerminalIdleSnapshot(forceMeetingRefresh: Boolean): TerminalIdleSnapshot {
+        val batteryIntent = applicationContext.registerReceiver(
+            null,
+            IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        )
+        val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        val batteryPercent = if (level >= 0 && scale > 0) {
+            ((level * 100f) / scale).toInt().coerceIn(0, 100)
+        } else {
+            -1
+        }
+        val batteryStatus = batteryIntent?.getIntExtra(
+            BatteryManager.EXTRA_STATUS,
+            BatteryManager.BATTERY_STATUS_UNKNOWN
+        ) ?: BatteryManager.BATTERY_STATUS_UNKNOWN
+        val isCharging = batteryStatus == BatteryManager.BATTERY_STATUS_CHARGING ||
+            batteryStatus == BatteryManager.BATTERY_STATUS_FULL
+
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        val activeNetwork = connectivity?.activeNetwork
+        val caps = connectivity?.getNetworkCapabilities(activeNetwork)
+        val wifiConnected = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        val wifiManager = applicationContext.getSystemService(WifiManager::class.java)
+        val wifiInfo = wifiManager?.connectionInfo
+        val rssi = wifiInfo?.rssi ?: -127
+        val rawSsid = wifiInfo?.ssid?.trim()?.trim('"').orEmpty()
+        val ssid = rawSsid
+            .takeIf { it.isNotBlank() && it != "<unknown ssid>" }
+            ?: "unknown"
+        val wifiLevel = if (rssi <= -120) {
+            0
+        } else {
+            WifiManager.calculateSignalLevel(rssi, WIFI_GRAPH_SEGMENTS + 1)
+                .coerceIn(0, WIFI_GRAPH_SEGMENTS)
+        }
+
+        val now = System.currentTimeMillis()
+        val shouldRefreshMeeting = forceMeetingRefresh ||
+            cachedNextMeetingSummary.isBlank() ||
+            now - cachedNextMeetingFetchedAt >= TERMINAL_MEETING_REFRESH_INTERVAL_MS
+        if (shouldRefreshMeeting) {
+            cachedNextMeetingSummary = runCatching {
+                val nextMeeting = RssRepository.fetchNextUpcomingMeeting(this@MainActivity)
+                formatNextMeetingSummary(nextMeeting)
+            }.getOrElse { "calendar unavailable" }
+            cachedNextMeetingFetchedAt = now
+        }
+
+        val batteryLine = if (batteryPercent >= 0) {
+            "battery ${buildGraph(batteryPercent, 100, BATTERY_GRAPH_SEGMENTS)} " +
+                "${batteryPercent}%${if (isCharging) " charging" else ""}"
+        } else {
+            "battery unavailable"
+        }
+        val wifiLine = if (wifiConnected) {
+            "wifi    ${buildGraph(wifiLevel, WIFI_GRAPH_SEGMENTS, WIFI_GRAPH_SEGMENTS)} " +
+                "$ssid (${rssi} dBm)"
+        } else {
+            "wifi    disconnected"
+        }
+
+        val left = buildString {
+            append("mishell@android:~$ screenfetch\n")
+            append("OS     Android ")
+            append(android.os.Build.VERSION.RELEASE)
+            append('\n')
+            append("device ")
+            append(android.os.Build.MODEL)
+            append('\n')
+            append("clock  ")
+            append(LocalTime.now().format(terminalClockFormatter))
+            append('\n')
+            append(batteryLine)
+            append('\n')
+            append(wifiLine)
+        }
+        val right = buildString {
+            append("next meeting\n")
+            append(cachedNextMeetingSummary)
+            append("\n\n")
+            append("tip: tap MIC to start voice input")
+        }
+        return TerminalIdleSnapshot(leftColumn = left, rightColumn = right)
+    }
+
+    private fun buildGraph(value: Int, maxValue: Int, segments: Int): String {
+        if (maxValue <= 0 || segments <= 0) {
+            return "[n/a]"
+        }
+        val clamped = value.coerceIn(0, maxValue)
+        val filled = ((clamped.toDouble() / maxValue.toDouble()) * segments)
+            .toInt()
+            .coerceIn(0, segments)
+        return buildString {
+            append('[')
+            repeat(filled) { append('#') }
+            repeat(segments - filled) { append('-') }
+            append(']')
+        }
+    }
+
+    private fun formatNextMeetingSummary(meeting: RssRepository.MeetingListItem?): String {
+        if (meeting == null) {
+            return "none scheduled"
+        }
+        val start = meeting.startsAtUtc
+        if (start == null) {
+            return meeting.title
+        }
+
+        val now = java.time.Instant.now()
+        val until = Duration.between(now, start).toMinutes()
+        val relative = when {
+            until < 0 -> "started"
+            until < 1 -> "starting now"
+            until < 60 -> "in ${until}m"
+            else -> {
+                val hours = until / 60
+                val minutes = until % 60
+                if (minutes == 0L) "in ${hours}h" else "in ${hours}h ${minutes}m"
+            }
+        }
+        return buildString {
+            append(terminalMeetingFormatter.format(start))
+            append('\n')
+            append(meeting.title)
+            append('\n')
+            append(relative)
+        }
     }
 
     private fun renderTranscriptAndAssistant(transcript: String, assistantText: String) {
         val streamTimeline = buildTerminalStreamSnapshot(activeAssistantLabel())
-        binding.terminalOutput.text = buildString {
+        showTerminalText(buildString {
             append("USR://")
             append(transcript)
             if (streamTimeline.isNotBlank()) {
@@ -1420,7 +1646,7 @@ class MainActivity : AppCompatActivity() {
                 append("://")
                 append(assistantText)
             }
-        }
+        })
         scrollTerminalToBottom()
     }
 
@@ -1612,6 +1838,8 @@ class MainActivity : AppCompatActivity() {
         wisprComposeDialog = null
         homeClockJob?.cancel()
         homeClockJob = null
+        terminalIdleJob?.cancel()
+        terminalIdleJob = null
         rssTickerJob?.cancel()
         rssTickerJob = null
         cancelActiveWork()

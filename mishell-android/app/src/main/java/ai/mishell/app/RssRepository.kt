@@ -201,27 +201,42 @@ object RssRepository {
                     statement.executeQuery().use { rs ->
                         buildList {
                             while (rs.next()) {
-                                val eventId = rs.getStringOrNull("event_id") ?: continue
-                                val title = rs.getStringOrNull("title")
-                                    .orEmpty()
-                                    .ifBlank { "(untitled meeting)" }
-                                add(
-                                    MeetingListItem(
-                                        eventId = eventId,
-                                        title = title,
-                                        organizerName = rs.getStringOrNull("sender_name"),
-                                        organizerEmail = rs.getStringOrNull("sender_email"),
-                                        attendeeNames = rs.getStringListOrEmpty("attendee_names"),
-                                        startsAtUtc = rs.getInstantOrNull("starts_at_utc"),
-                                        endsAtUtc = rs.getInstantOrNull("ends_at_utc"),
-                                        room = rs.getStringOrNull("room"),
-                                        locationDisplayName = rs.getStringOrNull("location_display_name"),
-                                        descriptionPreview = rs.getStringOrNull("description_preview"),
-                                        webLink = rs.getStringOrNull("web_link")
-                                    )
-                                )
+                                val item = rs.toMeetingListItemOrNull() ?: continue
+                                add(item)
                             }
                         }
+                    }
+                }
+            }
+        }
+
+    suspend fun fetchNextUpcomingMeeting(context: Context): MeetingListItem? =
+        withContext(Dispatchers.IO) {
+            queryDb(context) { connection ->
+                connection.prepareStatement(
+                    """
+                    select
+                        event_id,
+                        title,
+                        sender_name,
+                        sender_email,
+                        attendee_names,
+                        starts_at_utc,
+                        ends_at_utc,
+                        room,
+                        location ->> 'displayName' as location_display_name,
+                        description_preview,
+                        web_link
+                    from public.o365_calendar_events
+                    where starts_at_utc >= now()
+                      and coalesce(is_cancelled, false) = false
+                    order by starts_at_utc asc
+                    limit 1
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.executeQuery().use { rs ->
+                        if (!rs.next()) return@use null
+                        rs.toMeetingListItemOrNull()
                     }
                 }
             }
@@ -333,5 +348,25 @@ object RssRepository {
         } finally {
             sqlArray.free()
         }
+    }
+
+    private fun ResultSet.toMeetingListItemOrNull(): MeetingListItem? {
+        val eventId = getStringOrNull("event_id") ?: return null
+        val title = getStringOrNull("title")
+            .orEmpty()
+            .ifBlank { "(untitled meeting)" }
+        return MeetingListItem(
+            eventId = eventId,
+            title = title,
+            organizerName = getStringOrNull("sender_name"),
+            organizerEmail = getStringOrNull("sender_email"),
+            attendeeNames = getStringListOrEmpty("attendee_names"),
+            startsAtUtc = getInstantOrNull("starts_at_utc"),
+            endsAtUtc = getInstantOrNull("ends_at_utc"),
+            room = getStringOrNull("room"),
+            locationDisplayName = getStringOrNull("location_display_name"),
+            descriptionPreview = getStringOrNull("description_preview"),
+            webLink = getStringOrNull("web_link")
+        )
     }
 }
