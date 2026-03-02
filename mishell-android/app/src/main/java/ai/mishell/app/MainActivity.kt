@@ -183,6 +183,7 @@ class MainActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
+            lockLandscapeToCurrentRotation()
             enableImmersiveMode()
         }
     }
@@ -204,6 +205,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        onDisplayTouchInteraction(event)
         if (::binding.isInitialized) {
             if (handleSquirtTwoFingerToggle(event)) {
                 return true
@@ -1542,6 +1544,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun enableImmersiveMode() {
+        applyAlwaysOnUltraDimMode()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, binding.root).apply {
             hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
@@ -1617,6 +1620,7 @@ class MainActivity : AppCompatActivity() {
         releaseRecorder()
         recordingFile?.delete()
         recordingFile = null
+        clearDisplayPowerModeTimer()
         super.onDestroy()
     }
 }

@@ -3,6 +3,7 @@ package ai.mishell.app
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
@@ -44,12 +45,19 @@ class PlaceholderActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
+            lockLandscapeToCurrentRotation()
             enableImmersiveMode()
         }
     }
 
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        onDisplayTouchInteraction(event)
+        return super.dispatchTouchEvent(event)
+    }
+
     override fun onDestroy() {
         autoScrollJob?.cancel()
+        clearDisplayPowerModeTimer()
         super.onDestroy()
     }
 
@@ -174,6 +182,7 @@ class PlaceholderActivity : AppCompatActivity() {
     }
 
     private fun enableImmersiveMode() {
+        applyAlwaysOnUltraDimMode()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, binding.root).apply {
             hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())

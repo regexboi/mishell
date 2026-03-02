@@ -1,6 +1,7 @@
 package ai.mishell.app
 
 import android.os.Bundle
+import android.view.MotionEvent
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -33,6 +34,18 @@ class ConfigActivity : AppCompatActivity() {
             AppSettings.setWisprTextModeEnabled(this, enabled)
         }
 
+        binding.displayPowerSwitch.isChecked = AppSettings.isAlwaysOnUltraDimEnabled(this)
+        binding.displayPowerSwitch.setOnCheckedChangeListener { _, enabled ->
+            AppSettings.setAlwaysOnUltraDimEnabled(this, enabled)
+            applyAlwaysOnUltraDimMode()
+        }
+
+        binding.orientationLockSwitch.isChecked = AppSettings.isOrientationLockEnabled(this)
+        binding.orientationLockSwitch.setOnCheckedChangeListener { _, enabled ->
+            AppSettings.setOrientationLockEnabled(this, enabled)
+            lockLandscapeToCurrentRotation()
+        }
+
         when (AppSettings.getBackendMode(this)) {
             AppSettings.BackendMode.MISHELL -> binding.backendMishellRadio.isChecked = true
             AppSettings.BackendMode.CLAWDIA -> binding.backendClawdiaRadio.isChecked = true
@@ -61,8 +74,19 @@ class ConfigActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
+            lockLandscapeToCurrentRotation()
             enableImmersiveMode()
         }
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        onDisplayTouchInteraction(event)
+        return super.dispatchTouchEvent(event)
+    }
+
+    override fun onDestroy() {
+        clearDisplayPowerModeTimer()
+        super.onDestroy()
     }
 
     private fun saveAndTestClawdia() {
@@ -151,6 +175,7 @@ class ConfigActivity : AppCompatActivity() {
     }
 
     private fun enableImmersiveMode() {
+        applyAlwaysOnUltraDimMode()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, binding.root).apply {
             hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())

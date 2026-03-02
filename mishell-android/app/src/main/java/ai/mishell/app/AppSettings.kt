@@ -13,6 +13,8 @@ object AppSettings {
     private const val SECURE_PREFS_NAME = "mishell_secure_settings"
 
     private const val KEY_WISPR_TEXT_MODE = "wispr_text_mode"
+    private const val KEY_ALWAYS_ON_ULTRA_DIM = "always_on_ultra_dim"
+    private const val KEY_ORIENTATION_LOCK = "orientation_lock"
     private const val KEY_BACKEND_MODE = "backend_mode"
     private const val KEY_CLAWDIA_GATEWAY_URL = "clawdia_gateway_url"
     private const val KEY_INSTANCE_ID = "app_instance_id"
@@ -39,6 +41,30 @@ object AppSettings {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_WISPR_TEXT_MODE, enabled)
+            .apply()
+    }
+
+    fun isAlwaysOnUltraDimEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ALWAYS_ON_ULTRA_DIM, true)
+    }
+
+    fun setAlwaysOnUltraDimEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_ALWAYS_ON_ULTRA_DIM, enabled)
+            .apply()
+    }
+
+    fun isOrientationLockEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ORIENTATION_LOCK, true)
+    }
+
+    fun setOrientationLockEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_ORIENTATION_LOCK, enabled)
             .apply()
     }
 

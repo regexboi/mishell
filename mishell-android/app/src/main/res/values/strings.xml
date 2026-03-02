@@ -40,6 +40,10 @@ Tap MIC again to transcribe.</string>
     <string name="config_title">CONFIG</string>
     <string name="config_wispr_title">Witch (Whisper) text mode</string>
     <string name="config_wispr_description">Tap terminal to open a full-size text compose modal with send.</string>
+    <string name="config_display_power_title">Always on + ultra dim</string>
+    <string name="config_display_power_description">Keep screen awake and force extra-low brightness for kiosk-style usage.</string>
+    <string name="config_orientation_lock_title">Orientation lock (flipped landscape)</string>
+    <string name="config_orientation_lock_description">Lock to one landscape side. Disable to allow both landscape directions.</string>
     <string name="config_backend_title">Assistant backend</string>
     <string name="config_backend_description">Switch between MISHELL SSE endpoint and CLAWDIA OpenClaw gateway streaming.</string>
     <string name="config_backend_mishell">Mishell</string>

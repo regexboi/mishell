@@ -100,11 +100,13 @@ class ArticleReaderActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
+            lockLandscapeToCurrentRotation()
             enableImmersiveMode()
         }
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        onDisplayTouchInteraction(event)
         if (handleSquirtTwoFingerToggle(event)) {
             return true
         }
@@ -114,6 +116,7 @@ class ArticleReaderActivity : AppCompatActivity() {
     override fun onDestroy() {
         squirtPlaybackJob?.cancel()
         squirtPlaybackJob = null
+        clearDisplayPowerModeTimer()
         super.onDestroy()
     }
 
@@ -440,6 +443,7 @@ class ArticleReaderActivity : AppCompatActivity() {
     }
 
     private fun enableImmersiveMode() {
+        applyAlwaysOnUltraDimMode()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, binding.root).apply {
             hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
