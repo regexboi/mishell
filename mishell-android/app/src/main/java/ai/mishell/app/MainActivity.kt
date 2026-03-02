@@ -191,6 +191,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         setWisprTextMode(AppSettings.isWisprTextModeEnabled(this), animate = false)
+        onDisplayForegrounded()
     }
 
     override fun onStart() {

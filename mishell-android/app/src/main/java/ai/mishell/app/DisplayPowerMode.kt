@@ -45,6 +45,13 @@ internal fun AppCompatActivity.onDisplayTouchInteraction(event: MotionEvent) {
     }
 }
 
+internal fun AppCompatActivity.onDisplayForegrounded() {
+    if (!AppSettings.isAlwaysOnUltraDimEnabled(this)) {
+        return
+    }
+    brightenTemporarilyAfterInteraction()
+}
+
 internal fun AppCompatActivity.clearDisplayPowerModeTimer() {
     val activeWindow = window
     val pendingDimRunnable = pendingDimRunnables.remove(activeWindow)
