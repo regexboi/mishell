@@ -33,7 +33,8 @@ object RssRepository {
         val sourceName: String?,
         val publishedAt: Instant?,
         val excerpt: String?,
-        val link: String?
+        val link: String?,
+        val isHighSignal: Boolean
     )
 
     data class ArticleDetail(
@@ -100,7 +101,11 @@ object RssRepository {
             }
         }
 
-    suspend fun fetchArticles(context: Context, limit: Int = 250): List<ArticleListItem> =
+    suspend fun fetchArticles(
+        context: Context,
+        limit: Int = 250,
+        highSignalOnly: Boolean = false
+    ): List<ArticleListItem> =
         withContext(Dispatchers.IO) {
             queryDb(context) { connection ->
                 connection.prepareStatement(
@@ -111,13 +116,16 @@ object RssRepository {
                         source_name,
                         published_at,
                         excerpt,
-                        link
+                        link,
+                        coalesce(high_signal, false) as high_signal
                     from public.articles
-                    order by coalesce(published_at, created_at) desc
+                    where (? = false or coalesce(high_signal, false) = true)
+                    order by coalesce(published_at, created_at) desc nulls last, id desc
                     limit ?
                     """.trimIndent()
                 ).use { statement ->
-                    statement.setInt(1, limit)
+                    statement.setBoolean(1, highSignalOnly)
+                    statement.setInt(2, limit)
                     statement.executeQuery().use { rs ->
                         buildList {
                             while (rs.next()) {
@@ -130,7 +138,8 @@ object RssRepository {
                                         sourceName = rs.getStringOrNull("source_name"),
                                         publishedAt = rs.getInstantOrNull("published_at"),
                                         excerpt = rs.getStringOrNull("excerpt"),
-                                        link = rs.getStringOrNull("link")
+                                        link = rs.getStringOrNull("link"),
+                                        isHighSignal = rs.getBooleanOrFalse("high_signal")
                                     )
                                 )
                             }
@@ -326,6 +335,11 @@ object RssRepository {
     private fun ResultSet.getInstantOrNull(column: String): Instant? {
         val timestamp = getTimestamp(column) ?: return null
         return timestamp.toInstant()
+    }
+
+    private fun ResultSet.getBooleanOrFalse(column: String): Boolean {
+        val value = getBoolean(column)
+        return if (wasNull()) false else value
     }
 
     private fun ResultSet.getStringListOrEmpty(column: String): List<String> {

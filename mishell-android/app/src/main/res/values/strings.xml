@@ -80,8 +80,10 @@ Tap MIC again to transcribe.</string>
     <string name="articles_status_loading">Loading articles…</string>
     <string name="articles_status_loaded">%1$d articles loaded</string>
     <string name="articles_status_empty">No articles available.</string>
+    <string name="articles_status_empty_high_signal">No high-signal articles available.</string>
     <string name="articles_status_error">Article load failed: %1$s</string>
     <string name="articles_no_excerpt">No excerpt available.</string>
+    <string name="articles_high_signal_toggle">High signal only</string>
     <string name="meetings_title">Upcoming Meetings</string>
     <string name="meetings_subtitle">Agenda view with free-time gaps and conflict flags.</string>
     <string name="meetings_status_loading">Loading upcoming meetings…</string>

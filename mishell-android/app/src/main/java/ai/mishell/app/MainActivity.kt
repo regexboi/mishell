@@ -1787,7 +1787,11 @@ class MainActivity : AppCompatActivity() {
         rssTickerJob = lifecycleScope.launch {
             while (isActive) {
                 val titles = runCatching {
-                    RssRepository.fetchArticles(this@MainActivity, limit = 120)
+                    RssRepository.fetchArticles(
+                        this@MainActivity,
+                        limit = 120,
+                        highSignalOnly = true
+                    )
                         .mapNotNull { it.title.takeIf(String::isNotBlank) }
                         .distinct()
                 }.getOrNull().orEmpty()

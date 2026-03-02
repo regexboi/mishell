@@ -10,6 +10,7 @@ import android.widget.ArrayAdapter
 import android.widget.BaseAdapter
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -30,6 +31,8 @@ import java.util.Locale
 class PlaceholderActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPlaceholderBinding
     private var autoScrollJob: Job? = null
+    private var articlesHighSignalOnly = false
+    private var articlesLoadGeneration = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,6 +70,7 @@ class PlaceholderActivity : AppCompatActivity() {
     }
 
     private fun setupSummariesScreen() {
+        hideArticleHighSignalToggle()
         binding.titleText.text = getString(R.string.summaries_title)
         binding.subtitleText.visibility = View.VISIBLE
         binding.subtitleText.text = getString(R.string.summaries_subtitle)
@@ -109,6 +113,7 @@ class PlaceholderActivity : AppCompatActivity() {
     }
 
     private fun setupArticleListScreen() {
+        showArticleHighSignalToggle()
         binding.titleText.text = getString(R.string.articles_title)
         binding.subtitleText.text = ""
         binding.subtitleText.visibility = View.GONE
@@ -117,45 +122,11 @@ class PlaceholderActivity : AppCompatActivity() {
         binding.loadingIndicator.visibility = View.VISIBLE
         binding.statusText.visibility = View.VISIBLE
         binding.statusText.text = getString(R.string.articles_status_loading)
-
-        lifecycleScope.launch {
-            runCatching {
-                RssRepository.fetchArticles(this@PlaceholderActivity)
-            }.onSuccess { articles ->
-                binding.loadingIndicator.visibility = View.GONE
-                if (articles.isEmpty()) {
-                    binding.statusText.text = getString(R.string.articles_status_empty)
-                    binding.contentList.visibility = View.GONE
-                    binding.placeholderText.visibility = View.VISIBLE
-                    binding.placeholderText.text = getString(R.string.articles_status_empty)
-                    return@onSuccess
-                }
-
-                binding.statusText.visibility = View.GONE
-                binding.contentList.adapter = ArticleAdapter(this@PlaceholderActivity, articles)
-                binding.contentList.setOnItemClickListener { _, _, position, _ ->
-                    val article = articles.getOrNull(position) ?: return@setOnItemClickListener
-                    startActivity(
-                        Intent(this@PlaceholderActivity, ArticleReaderActivity::class.java)
-                            .putExtra(ArticleReaderActivity.EXTRA_ARTICLE_ID, article.id)
-                    )
-                }
-            }.onFailure { error ->
-                binding.loadingIndicator.visibility = View.GONE
-                binding.statusText.visibility = View.VISIBLE
-                binding.statusText.text =
-                    getString(R.string.articles_status_error, error.message ?: "unknown error")
-                binding.contentList.visibility = View.GONE
-                binding.placeholderText.visibility = View.VISIBLE
-                binding.placeholderText.text = getString(
-                    R.string.articles_status_error,
-                    error.message ?: "unknown error"
-                )
-            }
-        }
+        loadArticlesScreen()
     }
 
     private fun setupFallbackScreen(number: Int) {
+        hideArticleHighSignalToggle()
         binding.titleText.text = getString(R.string.placeholder_label, number)
         binding.subtitleText.text = ""
         binding.subtitleText.visibility = View.GONE
@@ -168,6 +139,7 @@ class PlaceholderActivity : AppCompatActivity() {
     }
 
     private fun setupUpcomingMeetingsScreen() {
+        hideArticleHighSignalToggle()
         binding.titleText.text = getString(R.string.meetings_title)
         binding.subtitleText.visibility = View.VISIBLE
         binding.subtitleText.text = getString(R.string.meetings_subtitle)
@@ -240,6 +212,88 @@ class PlaceholderActivity : AppCompatActivity() {
         }
     }
 
+    private fun showArticleHighSignalToggle() {
+        binding.articleHighSignalToggle.visibility = View.VISIBLE
+        binding.articleHighSignalToggle.setOnCheckedChangeListener(null)
+        binding.articleHighSignalToggle.isChecked = articlesHighSignalOnly
+        binding.articleHighSignalToggle.setOnCheckedChangeListener { _, isChecked ->
+            if (articlesHighSignalOnly == isChecked) {
+                return@setOnCheckedChangeListener
+            }
+            articlesHighSignalOnly = isChecked
+            loadArticlesScreen()
+        }
+    }
+
+    private fun hideArticleHighSignalToggle() {
+        binding.articleHighSignalToggle.setOnCheckedChangeListener(null)
+        binding.articleHighSignalToggle.visibility = View.GONE
+    }
+
+    private fun loadArticlesScreen() {
+        binding.placeholderText.visibility = View.GONE
+        binding.contentList.visibility = View.VISIBLE
+        binding.loadingIndicator.visibility = View.VISIBLE
+        binding.statusText.visibility = View.VISIBLE
+        binding.statusText.text = getString(R.string.articles_status_loading)
+
+        val generation = ++articlesLoadGeneration
+        lifecycleScope.launch {
+            runCatching {
+                RssRepository.fetchArticles(
+                    context = this@PlaceholderActivity,
+                    highSignalOnly = articlesHighSignalOnly
+                )
+            }.onSuccess { articles ->
+                if (generation != articlesLoadGeneration) {
+                    return@onSuccess
+                }
+                binding.loadingIndicator.visibility = View.GONE
+                if (articles.isEmpty()) {
+                    val emptyText = if (articlesHighSignalOnly) {
+                        getString(R.string.articles_status_empty_high_signal)
+                    } else {
+                        getString(R.string.articles_status_empty)
+                    }
+                    binding.statusText.text = emptyText
+                    binding.contentList.visibility = View.GONE
+                    binding.placeholderText.visibility = View.VISIBLE
+                    binding.placeholderText.text = emptyText
+                    return@onSuccess
+                }
+
+                binding.statusText.visibility = View.GONE
+                binding.contentList.adapter = ArticleAdapter(
+                    activity = this@PlaceholderActivity,
+                    items = articles,
+                    highlightHighSignalItems = !articlesHighSignalOnly
+                )
+                binding.contentList.setSelection(0)
+                binding.contentList.setOnItemClickListener { _, _, position, _ ->
+                    val article = articles.getOrNull(position) ?: return@setOnItemClickListener
+                    startActivity(
+                        Intent(this@PlaceholderActivity, ArticleReaderActivity::class.java)
+                            .putExtra(ArticleReaderActivity.EXTRA_ARTICLE_ID, article.id)
+                    )
+                }
+            }.onFailure { error ->
+                if (generation != articlesLoadGeneration) {
+                    return@onFailure
+                }
+                binding.loadingIndicator.visibility = View.GONE
+                binding.statusText.visibility = View.VISIBLE
+                binding.statusText.text =
+                    getString(R.string.articles_status_error, error.message ?: "unknown error")
+                binding.contentList.visibility = View.GONE
+                binding.placeholderText.visibility = View.VISIBLE
+                binding.placeholderText.text = getString(
+                    R.string.articles_status_error,
+                    error.message ?: "unknown error"
+                )
+            }
+        }
+    }
+
     private class SummaryAdapter(
         activity: PlaceholderActivity,
         items: List<RssRepository.SummaryItem>
@@ -266,12 +320,15 @@ class PlaceholderActivity : AppCompatActivity() {
 
     private class ArticleAdapter(
         activity: PlaceholderActivity,
-        items: List<RssRepository.ArticleListItem>
+        items: List<RssRepository.ArticleListItem>,
+        private val highlightHighSignalItems: Boolean
     ) : ArrayAdapter<RssRepository.ArticleListItem>(activity, 0, items) {
         private val inflater = LayoutInflater.from(activity)
         private val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
             .withLocale(Locale.getDefault())
             .withZone(ZoneId.systemDefault())
+        private val defaultTitleColor = ContextCompat.getColor(activity, R.color.cyber_text)
+        private val highSignalTitleColor = ContextCompat.getColor(activity, R.color.cyber_pink)
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val view = convertView ?: inflater.inflate(R.layout.item_article, parent, false)
@@ -282,6 +339,8 @@ class PlaceholderActivity : AppCompatActivity() {
             val excerptText = view.findViewById<TextView>(R.id.article_excerpt)
 
             titleText.text = item?.title.orEmpty()
+            val useHighSignalStyle = highlightHighSignalItems && item?.isHighSignal == true
+            titleText.setTextColor(if (useHighSignalStyle) highSignalTitleColor else defaultTitleColor)
             val source = item?.sourceName?.takeIf { it.isNotBlank() } ?: "Unknown source"
             val published = item?.publishedAt?.let { formatter.format(it) } ?: "Unknown date"
             metaText.text = "$source • $published"
