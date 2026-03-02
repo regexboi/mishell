@@ -35,9 +35,11 @@ Tap MIC again to transcribe.</string>
     <string name="banner_rss_prefix">RSS:// </string>
     <string name="wispr_input_hint">Type with Wispr...</string>
     <string name="wispr_send">Send</string>
+    <string name="wispr_modal_hint">Type your message…</string>
+    <string name="wispr_modal_cancel">Cancel</string>
     <string name="config_title">CONFIG</string>
     <string name="config_wispr_title">Witch (Whisper) text mode</string>
-    <string name="config_wispr_description">Replace the witch button with a focused text-input row and send button.</string>
+    <string name="config_wispr_description">Tap terminal to open a full-size text compose modal with send.</string>
     <string name="config_backend_title">Assistant backend</string>
     <string name="config_backend_description">Switch between MISHELL SSE endpoint and CLAWDIA OpenClaw gateway streaming.</string>
     <string name="config_backend_mishell">Mishell</string>

@@ -12,13 +12,16 @@ import android.util.TypedValue
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.InputMethodManager
 import android.widget.SeekBar
 import androidx.activity.OnBackPressedCallback
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.AppCompatEditText
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -36,6 +39,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.google.android.material.button.MaterialButton
 import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -104,6 +108,8 @@ class MainActivity : AppCompatActivity() {
     private val wisprConstraints = ConstraintSet()
     private val wisprFullscreenConstraints = ConstraintSet()
     private var isWisprTextMode = false
+    private var wisprDraftText = ""
+    private var wisprComposeDialog: AlertDialog? = null
     private val assistantTextLock = Any()
     private val assistantTextBuffer = StringBuilder(1024)
     private val squirtWordsLock = Any()
@@ -324,6 +330,22 @@ class MainActivity : AppCompatActivity() {
             ConstraintSet.END
         )
         wisprConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.END, 0)
+        wisprConstraints.clear(binding.bottomBanner.id, ConstraintSet.START)
+        wisprConstraints.clear(binding.bottomBanner.id, ConstraintSet.END)
+        wisprConstraints.connect(
+            binding.bottomBanner.id,
+            ConstraintSet.START,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.START
+        )
+        wisprConstraints.connect(
+            binding.bottomBanner.id,
+            ConstraintSet.END,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.END
+        )
+        wisprConstraints.setMargin(binding.bottomBanner.id, ConstraintSet.START, 0)
+        wisprConstraints.setMargin(binding.bottomBanner.id, ConstraintSet.END, 0)
 
         wisprFullscreenConstraints.connect(
             binding.diagnosticPanel.id,
@@ -346,8 +368,8 @@ class MainActivity : AppCompatActivity() {
         wisprFullscreenConstraints.connect(
             binding.diagnosticPanel.id,
             ConstraintSet.BOTTOM,
-            binding.wisprInputBar.id,
-            ConstraintSet.TOP
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.BOTTOM
         )
         wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.START, 0)
         wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.END, 0)
@@ -360,8 +382,16 @@ class MainActivity : AppCompatActivity() {
                 override fun onDown(e: MotionEvent): Boolean = true
 
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                    if (shouldHandleTerminalSingleTap(e.rawX, e.rawY)) {
+                    if (isPointInsideViewRaw(binding.diagnosticHeader, e.rawX, e.rawY)) {
                         toggleTerminalFullscreen()
+                        return true
+                    }
+                    if (
+                        isWisprTextMode &&
+                        !isSquirtMode &&
+                        shouldHandleTerminalSingleTap(e.rawX, e.rawY)
+                    ) {
+                        showWisprComposeDialog()
                         return true
                     }
                     return false
@@ -405,7 +435,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         )
-        binding.diagnosticHeader.setOnClickListener { toggleTerminalFullscreen() }
     }
 
     private fun toggleTerminalFullscreen() {
@@ -491,12 +520,12 @@ class MainActivity : AppCompatActivity() {
         if (fullscreen) {
             binding.iconGrid.visibility = View.GONE
             binding.bottomBanner.visibility = View.GONE
-            binding.wisprInputBar.visibility = if (isWisprTextMode) View.VISIBLE else View.GONE
+            binding.wisprInputBar.visibility = View.GONE
             binding.rightStack.visibility = View.GONE
         } else {
             binding.iconGrid.visibility = View.VISIBLE
             binding.bottomBanner.visibility = View.VISIBLE
-            binding.wisprInputBar.visibility = if (isWisprTextMode) View.VISIBLE else View.GONE
+            binding.wisprInputBar.visibility = View.GONE
             binding.rightStack.visibility = if (isWisprTextMode) View.GONE else View.VISIBLE
         }
         scrollTerminalToBottom()
@@ -509,6 +538,7 @@ class MainActivity : AppCompatActivity() {
         isWisprTextMode = enabled
         if (!enabled) {
             binding.wisprInput.clearFocus()
+            wisprComposeDialog?.dismiss()
         } else {
             suppressSystemKeyboard()
         }
@@ -684,6 +714,62 @@ class MainActivity : AppCompatActivity() {
         binding.wisprInput.text?.clear()
         suppressSystemKeyboard()
         submitTextPrompt(transcript)
+    }
+
+    private fun showWisprComposeDialog() {
+        if (!isWisprTextMode || isBusy || isFinishing || isDestroyed) {
+            return
+        }
+        if (wisprComposeDialog?.isShowing == true) {
+            return
+        }
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_wispr_compose, null)
+        val input = dialogView.findViewById<AppCompatEditText>(R.id.wispr_compose_input)
+        val sendButton = dialogView.findViewById<MaterialButton>(R.id.wispr_compose_send)
+        val cancelButton = dialogView.findViewById<MaterialButton>(R.id.wispr_compose_cancel)
+
+        input.setText(wisprDraftText)
+        input.setSelection(input.text?.length ?: 0)
+
+        var didSend = false
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+        wisprComposeDialog = dialog
+
+        sendButton.setOnClickListener {
+            if (isBusy) {
+                return@setOnClickListener
+            }
+            val transcript = input.text?.toString()?.trim().orEmpty()
+            if (transcript.isBlank()) {
+                return@setOnClickListener
+            }
+            didSend = true
+            wisprDraftText = ""
+            dialog.dismiss()
+            submitTextPrompt(transcript)
+        }
+        cancelButton.setOnClickListener { dialog.dismiss() }
+
+        dialog.setOnShowListener {
+            dialog.window?.setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+            )
+            input.requestFocus()
+            input.post {
+                getInputManager()?.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+        dialog.setOnDismissListener {
+            if (!didSend) {
+                wisprDraftText = input.text?.toString().orEmpty()
+            }
+            getInputManager()?.hideSoftInputFromWindow(input.windowToken, 0)
+            wisprComposeDialog = null
+        }
+        dialog.show()
     }
 
     private fun submitTextPrompt(transcript: String) {
@@ -1049,8 +1135,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun suppressSystemKeyboard() {
-        val inputMethodManager = getSystemService(InputMethodManager::class.java)
-        inputMethodManager?.hideSoftInputFromWindow(binding.wisprInput.windowToken, 0)
+        getInputManager()?.hideSoftInputFromWindow(binding.wisprInput.windowToken, 0)
+    }
+
+    private fun getInputManager(): InputMethodManager? {
+        return getSystemService(InputMethodManager::class.java)
     }
 
     private fun resetAssistantStreamState() {
@@ -1475,6 +1564,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        wisprComposeDialog?.dismiss()
+        wisprComposeDialog = null
         rssTickerJob?.cancel()
         rssTickerJob = null
         cancelActiveWork()
