@@ -56,3 +56,25 @@ curl -X POST http://localhost:8000/ingest/run
 - Scheduled ingestion starts on API boot and runs every `POLL_INTERVAL_MINUTES`.
 - Each feed run is capped by `MAX_ENTRIES_PER_FEED` (default `100`) to avoid deep historical replays.
 - If `OPENAI_API_KEY` is missing, fallback summaries use article titles.
+
+## Systemd Deployment
+
+Use the installer script to run the API as a boot-persistent system service.
+
+1. Ensure `uv` is installed for the target service user (for example, `/home/x/.local/bin/uv`).
+2. Ensure `.env` is present in the project directory.
+3. Run:
+
+```bash
+sudo ./scripts/install-systemd-service.sh \
+  --user x \
+  --project-dir /home/x/scripts/mishell/mishell-rss
+```
+
+Common commands:
+
+```bash
+sudo systemctl status mishell-rss.service
+sudo systemctl restart mishell-rss.service
+sudo journalctl -u mishell-rss.service -f
+```
