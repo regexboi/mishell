@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <EditText
+        android:id="@+id/project_name_input"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="@drawable/bg_wispr_compose_input"
+        android:hint="@string/codex_project_name_hint"
+        android:paddingHorizontal="14dp"
+        android:textColor="@color/cyber_text"
+        android:textColorHint="@color/cyber_text_dim" />
+
+    <EditText
+        android:id="@+id/project_path_input"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_wispr_compose_input"
+        android:fontFamily="monospace"
+        android:hint="@string/codex_project_path_hint"
+        android:paddingHorizontal="14dp"
+        android:textColor="@color/cyber_text"
+        android:textColorHint="@color/cyber_text_dim" />
+
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/full_access_switch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/codex_project_full_access_toggle"
+        android:textColor="@color/cyber_text" />
+</LinearLayout>

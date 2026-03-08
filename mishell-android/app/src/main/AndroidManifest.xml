@@ -13,7 +13,23 @@
         android:label="@string/app_name"
         android:roundIcon="@drawable/mishell"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Mishell">
+        android:theme="@style/Theme.Mishell"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".CodexThreadActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+
+        <activity
+            android:name=".CodexThreadsActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+
+        <activity
+            android:name=".CodexProjectsActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
 
         <activity
             android:name=".ArticleReaderActivity"

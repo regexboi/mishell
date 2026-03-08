@@ -262,10 +262,10 @@ class MainActivity : AppCompatActivity() {
 
         tiles.forEachIndexed { index, view ->
             view.setOnClickListener {
-                if (index == 3) {
-                    startActivity(Intent(this, ConfigActivity::class.java))
-                } else {
-                    startActivity(
+                when (index) {
+                    1 -> startActivity(Intent(this, CodexProjectsActivity::class.java))
+                    3 -> startActivity(Intent(this, ConfigActivity::class.java))
+                    else -> startActivity(
                         Intent(this, PlaceholderActivity::class.java)
                             .putExtra(PlaceholderActivity.EXTRA_PLACEHOLDER_NUMBER, index + 1)
                     )

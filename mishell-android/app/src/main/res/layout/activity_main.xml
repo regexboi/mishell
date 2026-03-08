@@ -66,14 +66,26 @@
         <LinearLayout
             android:id="@+id/tile_2"
             style="@style/NeonTile"
+            android:gravity="center"
+            android:orientation="vertical"
             android:clickable="true"
             android:focusable="true">
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/tile_2_icon"
-                style="@style/NeonTileIcon"
-                android:contentDescription="@string/tile_messages"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:adjustViewBounds="true"
+                android:contentDescription="@string/tile_codex"
+                android:scaleType="fitCenter"
                 app:srcCompat="@drawable/rss" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tile_2_label"
+                style="@style/NeonTileLabel"
+                android:layout_marginTop="6dp"
+                android:text="@string/tile_codex" />
         </LinearLayout>
 
         <LinearLayout

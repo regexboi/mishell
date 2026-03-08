@@ -17,6 +17,7 @@ object AppSettings {
     private const val KEY_ORIENTATION_LOCK = "orientation_lock"
     private const val KEY_BACKEND_MODE = "backend_mode"
     private const val KEY_CLAWDIA_GATEWAY_URL = "clawdia_gateway_url"
+    private const val KEY_CODEX_SERVER_URL = "codex_server_url"
     private const val KEY_INSTANCE_ID = "app_instance_id"
     private const val KEY_NEON_CONNECTION_STRING = "neon_connection_string"
 
@@ -105,6 +106,21 @@ object AppSettings {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit {
                 putString(KEY_CLAWDIA_GATEWAY_URL, value.trim())
+            }
+    }
+
+    fun getCodexServerUrl(context: Context): String {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_CODEX_SERVER_URL, "ws://localhost:4500")
+            ?.trim()
+            .orEmpty()
+            .ifBlank { "ws://localhost:4500" }
+    }
+
+    fun setCodexServerUrl(context: Context, value: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit {
+                putString(KEY_CODEX_SERVER_URL, value.trim())
             }
     }
 
