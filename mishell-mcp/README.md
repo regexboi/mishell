@@ -168,6 +168,35 @@ This endpoint is intentionally text-only for a stable client parser contract. If
 - `shell_session_reset`
   - Resets a session process.
 
+- `secretary_reminder_create`
+  - Creates a reminder row in Neon using `NEON_STRING`.
+  - Inputs: `reminder_text`, `reminder_datetime` (ISO 8601 with timezone), optional `reminder_occurence` (Postgres interval string like `1 day`).
+  - Ensures the reminder tables/functions exist and schedules `pg_cron` to run every 30 seconds.
+
+## Reminder Backend
+
+The reminder tool expects `NEON_STRING` in `.env` or the process environment:
+
+```bash
+echo 'NEON_STRING=postgresql://user:pass@host/dbname?sslmode=require' >> .env
+```
+
+Database objects created on first use:
+- `public.secretary_reminders`
+- `public.secretary_reminder_sends`
+- `public.secretary_process_due_reminders()`
+- pg_cron job `mishell-secretary-reminders-every-30-seconds`
+
+Neon note:
+- Neon currently does not support `cron.schedule_in_database(...)`.
+- `pg_cron` has to be enabled for your target app database first. Neon’s current docs say this is done by contacting Neon support with your endpoint ID and database name.
+- After Neon enables it and the compute restarts, Mishell creates `pg_cron` in the app database and schedules `mishell-secretary-reminders-every-30-seconds` with `cron.schedule(...)`.
+
+Delivery model:
+- Due reminders are copied into `public.secretary_reminder_sends`.
+- Client polling can read and delete rows from that send table.
+- Delivery state is tracked on `public.secretary_reminders` via `sent_count`, `last_processed_run_at`, and `last_enqueued_at`, so the queue table can remain ephemeral.
+
 ## Admin UI endpoints (HTTP mode)
 
 - `GET /` page

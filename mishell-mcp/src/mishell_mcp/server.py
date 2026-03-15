@@ -16,6 +16,7 @@ from .auth import AUTH_COOKIE_NAME, ApiKeyAuthManager, ApiKeyHTTPMiddleware
 from .config import ConfigManager, PolicyConfig
 from .llm import register_llm_routes
 from .policy import PolicyEngine
+from .reminders import CRON_JOB_NAME, ReminderStore
 from .shell_session import SessionManager
 from .speech import register_speech_routes
 from .toon_utils import encode_toon
@@ -30,6 +31,7 @@ class AppState:
     policy: PolicyEngine
     sessions: SessionManager
     auth: ApiKeyAuthManager | None
+    reminders: ReminderStore | None
 
 
 class MishellApp:
@@ -76,6 +78,7 @@ class MishellApp:
                 e2b_api_key=e2b_api_key,
             ),
             auth=auth,
+            reminders=ReminderStore.from_env(),
         )
 
     @staticmethod
@@ -206,6 +209,36 @@ class MishellApp:
             payload = {"ok": True, "sid": sid, "msg": "session reset"}
             return {
                 "txt": f"ok sid={sid} session reset",
+                "data": payload,
+            }
+
+        @self.mcp.tool
+        def secretary_reminder_create(
+            reminder_text: str,
+            reminder_datetime: str,
+            reminder_occurence: str | None = None,
+        ) -> dict[str, Any]:
+            """Create a reminder in Neon and ensure the pg_cron worker is scheduled every 30 seconds."""
+            store = self.state.reminders
+            if store is None:
+                raise RuntimeError("NEON_STRING is not configured.")
+
+            record = store.create_reminder(
+                reminder_text=reminder_text,
+                reminder_datetime=reminder_datetime,
+                reminder_occurence=reminder_occurence,
+            )
+            payload = {
+                "ok": True,
+                "cron_job_name": CRON_JOB_NAME,
+                "reminder": record.to_payload(),
+            }
+            return {
+                "txt": (
+                    f"ok reminder_id={record.id} "
+                    f"next_run_at={record.next_run_at.isoformat()} "
+                    f"active={str(record.active).lower()}"
+                ),
                 "data": payload,
             }
 
