@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">mishell</string>
     <string name="tile_home">Home</string>
-    <string name="tile_messages">Messages</string>
+    <string name="tile_messages">News</string>
     <string name="tile_codex">Codex</string>
     <string name="tile_tasks">Tasks</string>
     <string name="tile_config">Config</string>

@@ -201,6 +201,7 @@ class MainActivity : AppCompatActivity() {
         renderSquirtPlaceholder()
         binding.bottomBanner.isSelected = true
         setWisprTextMode(AppSettings.isWisprTextModeEnabled(this), animate = false)
+        setTerminalFullscreen(isTerminalFullscreen, animate = false, force = true)
         showTerminalLogo()
         startRssTicker()
     }
@@ -263,7 +264,7 @@ class MainActivity : AppCompatActivity() {
         tiles.forEachIndexed { index, view ->
             view.setOnClickListener {
                 when (index) {
-                    1 -> startActivity(Intent(this, CodexProjectsActivity::class.java))
+                    0 -> startActivity(Intent(this, CodexProjectsActivity::class.java))
                     3 -> startActivity(Intent(this, ConfigActivity::class.java))
                     else -> startActivity(
                         Intent(this, PlaceholderActivity::class.java)
@@ -601,8 +602,8 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.iconGrid.visibility = View.VISIBLE
             binding.bottomBanner.visibility = View.VISIBLE
-            binding.wisprInputBar.visibility = View.GONE
-            binding.rightStack.visibility = if (isWisprTextMode) View.GONE else View.VISIBLE
+            binding.wisprInputBar.visibility = View.VISIBLE
+            binding.rightStack.visibility = View.VISIBLE
         }
         scrollTerminalToBottom()
     }
@@ -780,7 +781,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun submitWisprPrompt() {
-        if (!isWisprTextMode || isBusy) {
+        if (isBusy) {
             return
         }
         val transcript = binding.wisprInput.text?.toString()?.trim().orEmpty()
