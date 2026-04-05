@@ -12,3 +12,4 @@
 /.kotlin/
 /tmp/
 .env
+/third_party/fluidmarkdown/**/build/

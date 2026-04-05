@@ -111,6 +111,7 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0")
     implementation("org.bouncycastle:bcprov-jdk18on:1.83")
     implementation("org.postgresql:postgresql:42.2.5")
+    implementation(project(":fluid-markdown"))
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")

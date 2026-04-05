@@ -4,9 +4,11 @@ import android.Manifest
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Typeface
 import android.media.MediaRecorder
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Bundle
@@ -31,6 +33,21 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.fluid.afm.AFMInitializer
+import com.fluid.afm.markdown.ElementClickEventCallback
+import com.fluid.afm.markdown.widget.PrinterMarkDownTextView
+import com.fluid.afm.styles.BlockQuoteStyle
+import com.fluid.afm.styles.BulletStyle
+import com.fluid.afm.styles.CodeStyle
+import com.fluid.afm.styles.FootnoteStyle
+import com.fluid.afm.styles.HorizonRuleStyle
+import com.fluid.afm.styles.LinkStyle
+import com.fluid.afm.styles.MarkdownStyles
+import com.fluid.afm.styles.OrderStyle
+import com.fluid.afm.styles.ParagraphStyle
+import com.fluid.afm.styles.Shape
+import com.fluid.afm.styles.TableStyle
+import com.fluid.afm.styles.TitleStyle
 import ai.mishell.app.databinding.ActivityMainBinding
 import ai.mishell.app.network.ClawdiaGatewayClient
 import ai.mishell.app.network.LlmStreamClient
@@ -81,7 +98,8 @@ class MainActivity : AppCompatActivity() {
         private const val SQUIRT_RAMP_FLOOR_MULTIPLIER = 0.45f
         private const val SQUIRT_BASE_TEXT_SIZE_SP = 40f
         private const val MAX_STREAM_DETAIL_LINES = 120
-        private const val MAX_TERMINAL_STREAM_BLOCKS = 160
+        private const val TERMINAL_MARKDOWN_PRINT_INTERVAL_MS = 6
+        private const val TERMINAL_MARKDOWN_CHUNK_SIZE = 20
         private const val TERMINAL_SWIPE_MIN_DISTANCE_DP = 72f
         private const val TERMINAL_SWIPE_MIN_VELOCITY_DP = 240f
         private const val TERMINAL_IDLE_REFRESH_INTERVAL_MS = 45_000L
@@ -140,23 +158,12 @@ class MainActivity : AppCompatActivity() {
     private val tmpViewLocation = IntArray(2)
     private val streamDetailsLock = Any()
     private val streamDetailLines = ArrayDeque<String>()
-    private val terminalStreamLock = Any()
-    private val terminalStreamBlocks = ArrayDeque<TerminalStreamBlock>()
+    private var isTerminalMarkdownStreamStarted = false
     private val homeClockFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale.US)
     private val terminalClockFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.US)
     private val terminalMeetingFormatter = DateTimeFormatter.ofPattern("EEE h:mm a")
         .withLocale(Locale.getDefault())
         .withZone(ZoneId.systemDefault())
-
-    private enum class TerminalStreamBlockType {
-        ASSISTANT,
-        DETAIL
-    }
-
-    private data class TerminalStreamBlock(
-        val type: TerminalStreamBlockType,
-        val text: StringBuilder
-    )
 
     private data class SquirtPlaybackFrame(
         val index: Int,
@@ -182,8 +189,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        AFMInitializer.init(applicationContext, null, null, null)
 
         enableImmersiveMode()
+        setupTerminalMarkdown()
         setupTiles()
         setupTerminalFullscreenToggle()
         setupMicButton()
@@ -207,6 +216,207 @@ class MainActivity : AppCompatActivity() {
         setTerminalFullscreen(isTerminalFullscreen, animate = false, force = true)
         showTerminalLogo()
         startRssTicker()
+    }
+
+    private fun setupTerminalMarkdown() {
+        binding.terminalOutput.init(
+            buildTerminalMarkdownStyles(),
+            object : ElementClickEventCallback {
+                override fun onLinkClicked(params: Map<String, Any>): Boolean {
+                    val url = params[ElementClickEventCallback.PARAM_KEY_LINK] as? String ?: return false
+                    return openExternalUri(url)
+                }
+
+                override fun onImageClicked(url: String, description: String) {
+                    openExternalUri(url)
+                }
+
+                override fun onTextClickableSpanClicked(
+                    widget: View,
+                    link: String,
+                    entityID: String,
+                    type: com.fluid.afm.markdown.html.SpanTextClickableSpan.ClickableTextType
+                ): Boolean {
+                    return openExternalUri(link)
+                }
+            }
+        )
+        binding.terminalOutput.setPrintParams(
+            TERMINAL_MARKDOWN_PRINT_INTERVAL_MS,
+            TERMINAL_MARKDOWN_CHUNK_SIZE
+        )
+        binding.terminalOutput.setSizeChangedListener { _, _ ->
+            scrollTerminalToBottom()
+        }
+        binding.terminalOutput.setPrintingEventListener(
+            object : PrinterMarkDownTextView.PrintingEventListener {
+                override fun onPrintStart() {
+                    scrollTerminalToBottom()
+                }
+
+                override fun onPrintStop(printAll: Boolean) {
+                    scrollTerminalToBottom()
+                }
+
+                override fun onPrintPaused(index: Int) {
+                    scrollTerminalToBottom()
+                }
+
+                override fun onPrintResumed() {
+                    scrollTerminalToBottom()
+                }
+            }
+        )
+    }
+
+    private fun buildTerminalMarkdownStyles(): MarkdownStyles {
+        val textColor = ContextCompat.getColor(this, R.color.cyber_text_dim)
+        val accentColor = ContextCompat.getColor(this, R.color.cyber_cyan)
+        val accentSecondary = ContextCompat.getColor(this, R.color.cyber_pink)
+        val panelColor = ContextCompat.getColor(this, R.color.cyber_panel_deep)
+        val surfaceColor = ContextCompat.getColor(this, R.color.cyber_panel)
+        val borderColor = ContextCompat.getColor(this, R.color.cyber_purple)
+
+        return MarkdownStyles.getDefaultStyles()
+            .paragraphStyle(
+                ParagraphStyle.create()
+                    .fontSize(spPx(15f).toFloat())
+                    .fontColor(textColor)
+                    .lineHeight(spPx(22f))
+                    .paragraphSpacing(dpPx(8))
+            )
+            .linkStyle(
+                LinkStyle.create()
+                    .fontColor(accentColor)
+                    .underline(false)
+                    .isBold(true)
+            )
+            .setBaseOrderStyle(
+                OrderStyle.create()
+                    .orderFontColor(accentSecondary)
+                    .leading(dpPx(10))
+                    .leadingSpacing(dpPx(8))
+                    .isBold(true)
+            )
+            .baseBulletStyle(
+                BulletStyle.create()
+                    .leading(dpPx(10))
+                    .leadingSpacing(dpPx(8))
+                    .setShape(
+                        Shape()
+                            .setColor(accentColor)
+                            .setType(Shape.SHAPE_CIRCLE)
+                            .setSize(dpPx(4))
+                    )
+            )
+            .footnoteStyle(
+                FootnoteStyle.create(accentColor, surfaceColor)
+                    .isBold(true)
+                    .size(spPx(18f).toFloat())
+                    .fontSize(spPx(11f).toFloat())
+            )
+            .blockQuoteStyle(
+                BlockQuoteStyle.create()
+                    .lineColor(accentSecondary)
+                    .lineWidth(dpPx(3))
+                    .lineCornerRadius(dpPx(2))
+                    .lineMargin(dpPx(16))
+                    .leftMargin(dpPx(8))
+                    .fontColor(textColor)
+                    .paragraphSpacing(dpPx(8))
+            )
+            .tableStyle(
+                TableStyle.create()
+                    .fontColor(textColor)
+                    .titleFontColor(accentColor)
+                    .titleBackgroundColor(panelColor)
+                    .headerBackgroundColor(surfaceColor)
+                    .bodyBackgroundColor(panelColor)
+                    .drawBorder(true)
+                    .borderColor(borderColor)
+                    .borderWidth(dpPx(1))
+                    .tableBlockRadius(dpPx(12))
+                    .titleBackgroundRadius(dpPx(12))
+                    .cellTopBottomPadding(dpPx(6))
+                    .cellLeftRightPadding(dpPx(10))
+            )
+            .codeStyle(
+                CodeStyle.create()
+                    .inlineFontColor(accentSecondary)
+                    .inlineFontSize(spPx(13f))
+                    .inlineCodeBackgroundColor(surfaceColor)
+                    .inlineCodeBackgroundRadius(dpPx(6))
+                    .inlinePaddingHorizontal(dpPx(4))
+                    .inlinePaddingVertical(dpPx(2))
+                    .codeFontColor(textColor)
+                    .codeFontSize(spPx(13f))
+                    .codeBackgroundColor(panelColor)
+                    .codeBackgroundRadius(dpPx(12))
+                    .titleFontColor(accentColor)
+                    .titleBackgroundColor(surfaceColor)
+                    .titleFontSize(spPx(12f))
+                    .borderColor(borderColor)
+                    .borderWidth(dpPx(1))
+                    .drawBorder(true)
+                    .lightIcon(true)
+                    .codeTypeface(Typeface.MONOSPACE)
+            )
+            .horizonRuleStyle(
+                HorizonRuleStyle.create()
+                    .setColor(borderColor)
+                    .setHeight(dpPx(1))
+                    .paragraphSpacing(dpPx(10))
+                    .paragraphSpacingBefore(dpPx(6))
+            )
+            .setTitleStyle(
+                0,
+                TitleStyle.create(1.28f)
+                    .setTypeface(Typeface.DEFAULT_BOLD)
+                    .paragraphSpacing(dpPx(10))
+                    .paragraphSpacingBefore(dpPx(8))
+            )
+            .setTitleStyle(
+                1,
+                TitleStyle.create(1.18f)
+                    .setTypeface(Typeface.DEFAULT_BOLD)
+                    .paragraphSpacing(dpPx(10))
+                    .paragraphSpacingBefore(dpPx(8))
+            )
+            .setTitleStyle(
+                2,
+                TitleStyle.create(1.1f)
+                    .setTypeface(Typeface.DEFAULT_BOLD)
+                    .paragraphSpacing(dpPx(8))
+                    .paragraphSpacingBefore(dpPx(6))
+            )
+            .apply {
+                titleStyles().forEach { style ->
+                    style.paragraph().fontColor(accentColor)
+                }
+            }
+    }
+
+    private fun dpPx(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun spPx(value: Float): Int =
+        TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_SP,
+            value,
+            resources.displayMetrics
+        ).toInt()
+
+    private fun openExternalUri(rawUrl: String?): Boolean {
+        val url = rawUrl?.trim().orEmpty()
+        if (url.isBlank()) {
+            return false
+        }
+        return runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            true
+        }.getOrElse {
+            Log.w(LOG_TAG, "Failed to open external uri: $url", it)
+            false
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -1029,9 +1239,8 @@ class MainActivity : AppCompatActivity() {
         if (delta.isBlank()) {
             return
         }
-        appendTerminalAssistantDelta(delta)
+        appendAssistantChunk(delta)
         if (isSquirtMode) {
-            appendAssistantChunk(delta)
             appendSquirtWords(delta)
             if (squirtPlaybackJob?.isActive != true) {
                 runOnUiThread {
@@ -1039,9 +1248,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } else {
-            val fullAssistantText = appendAssistantChunkAndSnapshot(delta)
             runOnUiThread {
-                renderTranscriptAndAssistant(transcript, fullAssistantText)
+                prepareTerminalConversation(transcript)
+                appendTerminalMarkdownDelta(delta)
             }
         }
     }
@@ -1231,9 +1440,6 @@ class MainActivity : AppCompatActivity() {
         synchronized(streamDetailsLock) {
             streamDetailLines.clear()
         }
-        synchronized(terminalStreamLock) {
-            terminalStreamBlocks.clear()
-        }
         synchronized(squirtWordsLock) {
             squirtWords.clear()
             squirtCarry.setLength(0)
@@ -1246,6 +1452,8 @@ class MainActivity : AppCompatActivity() {
         postSquirtProgressUiRefresh()
         runOnUiThread {
             if (::binding.isInitialized) {
+                resetTerminalMarkdownRenderer()
+                renderTerminalDetails("")
                 renderSquirtPlaceholder()
             }
         }
@@ -1254,13 +1462,6 @@ class MainActivity : AppCompatActivity() {
     private fun appendAssistantChunk(chunk: String) {
         synchronized(assistantTextLock) {
             assistantTextBuffer.append(chunk)
-        }
-    }
-
-    private fun appendAssistantChunkAndSnapshot(chunk: String): String {
-        synchronized(assistantTextLock) {
-            assistantTextBuffer.append(chunk)
-            return assistantTextBuffer.toString()
         }
     }
 
@@ -1434,30 +1635,92 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showTerminalError(message: String) {
-        val details = buildStreamDetailsSnapshot()
         showTerminalText(
-            buildString {
-                append(getString(R.string.terminal_error, message))
-                if (details.isNotBlank()) {
-                    append("\n\n──────── STREAM DETAILS ────────\n")
-                    append(details)
-                }
-            }
+            getString(R.string.terminal_error, message),
+            buildStreamDetailsSnapshot()
         )
         scrollTerminalToBottom()
     }
 
-    private fun showTerminalText(text: CharSequence) {
+    private fun showTerminalText(text: CharSequence, details: CharSequence? = null) {
         binding.terminalIdleContainer.visibility = View.GONE
-        binding.terminalOutput.visibility = View.VISIBLE
-        binding.terminalOutput.text = text
+        binding.terminalOutputContainer.visibility = View.VISIBLE
+        binding.terminalTranscriptLabel.visibility = View.GONE
+        binding.terminalTranscript.visibility = View.VISIBLE
+        binding.terminalTranscript.text = text
+        binding.terminalAssistantLabel.visibility = View.GONE
+        binding.terminalOutput.visibility = View.GONE
+        resetTerminalMarkdownRenderer()
+        renderTerminalDetails(details?.toString().orEmpty())
     }
 
     private fun showTerminalLogo() {
         binding.terminalIdleContainer.visibility = View.VISIBLE
-        binding.terminalOutput.visibility = View.GONE
-        binding.terminalOutput.text = ""
+        binding.terminalOutputContainer.visibility = View.GONE
+        binding.terminalTranscript.text = ""
+        binding.terminalDetails.text = ""
+        resetTerminalMarkdownRenderer()
         refreshTerminalIdleShell(forceMeetingRefresh = false)
+    }
+
+    private fun prepareTerminalConversation(transcript: String) {
+        binding.terminalIdleContainer.visibility = View.GONE
+        binding.terminalOutputContainer.visibility = View.VISIBLE
+        binding.terminalTranscriptLabel.visibility = if (transcript.isBlank()) View.GONE else View.VISIBLE
+        binding.terminalTranscript.visibility = if (transcript.isBlank()) View.GONE else View.VISIBLE
+        binding.terminalTranscript.text = transcript
+        binding.terminalAssistantLabel.visibility = View.VISIBLE
+        binding.terminalAssistantLabel.text = "${activeAssistantLabel()}://"
+    }
+
+    private fun seedTerminalMarkdownOutput(markdown: String, keepStreamOpen: Boolean) {
+        if (markdown.isBlank()) {
+            binding.terminalOutput.visibility = View.GONE
+            resetTerminalMarkdownRenderer()
+            return
+        }
+
+        binding.terminalOutput.visibility = View.VISIBLE
+        resetTerminalMarkdownRenderer()
+        if (keepStreamOpen) {
+            binding.terminalOutput.startPrinting(markdown, markdown.length)
+            isTerminalMarkdownStreamStarted = true
+        } else {
+            binding.terminalOutput.setMarkdownText(markdown)
+        }
+    }
+
+    private fun appendTerminalMarkdownDelta(delta: String) {
+        if (delta.isBlank()) {
+            return
+        }
+        binding.terminalOutput.visibility = View.VISIBLE
+        if (!isTerminalMarkdownStreamStarted) {
+            binding.terminalOutput.startPrinting(delta)
+            isTerminalMarkdownStreamStarted = true
+        } else {
+            binding.terminalOutput.appendPrinting(delta)
+        }
+        scrollTerminalToBottom()
+    }
+
+    private fun renderTerminalDetails(details: String) {
+        val visible = details.isNotBlank()
+        binding.terminalDetailsLabel.visibility = if (visible) View.VISIBLE else View.GONE
+        binding.terminalDetails.visibility = if (visible) View.VISIBLE else View.GONE
+        if (visible) {
+            binding.terminalDetails.text = details
+        } else {
+            binding.terminalDetails.text = ""
+        }
+    }
+
+    private fun resetTerminalMarkdownRenderer() {
+        if (binding.terminalOutput.isStarted) {
+            binding.terminalOutput.stopPrinting("")
+        }
+        isTerminalMarkdownStreamStarted = false
+        binding.terminalOutput.text = ""
     }
 
     private fun startTerminalIdleRefreshLoop() {
@@ -1638,20 +1901,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderTranscriptAndAssistant(transcript: String, assistantText: String) {
-        val streamTimeline = buildTerminalStreamSnapshot(activeAssistantLabel())
-        showTerminalText(buildString {
-            append("USR://")
-            append(transcript)
-            if (streamTimeline.isNotBlank()) {
-                append("\n\n")
-                append(streamTimeline)
-            } else {
-                append("\n\n")
-                append(activeAssistantLabel())
-                append("://")
-                append(assistantText)
-            }
-        })
+        prepareTerminalConversation(transcript)
+        seedTerminalMarkdownOutput(assistantText, keepStreamOpen = !isAssistantStreamComplete)
+        renderTerminalDetails(buildStreamDetailsSnapshot())
         scrollTerminalToBottom()
     }
 
@@ -1665,9 +1917,10 @@ class MainActivity : AppCompatActivity() {
     private fun appendStreamDetailAndRender(transcript: String, line: String) {
         appendStreamDetail(line)
         if (!isSquirtMode) {
-            val assistantText = getAssistantTextSnapshot()
             runOnUiThread {
-                renderTranscriptAndAssistant(transcript, assistantText)
+                prepareTerminalConversation(transcript)
+                renderTerminalDetails(buildStreamDetailsSnapshot())
+                scrollTerminalToBottom()
             }
         }
     }
@@ -1677,78 +1930,11 @@ class MainActivity : AppCompatActivity() {
         if (cleaned.isBlank()) {
             return
         }
-        appendTerminalDetail(cleaned)
         synchronized(streamDetailsLock) {
             streamDetailLines.addLast(cleaned)
             while (streamDetailLines.size > MAX_STREAM_DETAIL_LINES) {
                 streamDetailLines.removeFirst()
             }
-        }
-    }
-
-    private fun appendTerminalAssistantDelta(delta: String) {
-        synchronized(terminalStreamLock) {
-            val lastBlock = terminalStreamBlocks.peekLast()
-            if (lastBlock?.type == TerminalStreamBlockType.ASSISTANT) {
-                lastBlock.text.append(delta)
-            } else {
-                terminalStreamBlocks.addLast(
-                    TerminalStreamBlock(TerminalStreamBlockType.ASSISTANT, StringBuilder(delta))
-                )
-            }
-            trimTerminalStreamBlocksLocked()
-        }
-    }
-
-    private fun appendTerminalDetail(detail: String) {
-        synchronized(terminalStreamLock) {
-            val lastBlock = terminalStreamBlocks.peekLast()
-            if (lastBlock?.type == TerminalStreamBlockType.DETAIL) {
-                lastBlock.text.append('\n').append(detail)
-            } else {
-                terminalStreamBlocks.addLast(
-                    TerminalStreamBlock(TerminalStreamBlockType.DETAIL, StringBuilder(detail))
-                )
-            }
-            trimTerminalStreamBlocksLocked()
-        }
-    }
-
-    private fun trimTerminalStreamBlocksLocked() {
-        while (terminalStreamBlocks.size > MAX_TERMINAL_STREAM_BLOCKS) {
-            terminalStreamBlocks.removeFirst()
-        }
-    }
-
-    private fun buildTerminalStreamSnapshot(assistantLabel: String): String {
-        synchronized(terminalStreamLock) {
-            if (terminalStreamBlocks.isEmpty()) {
-                return ""
-            }
-
-            val output = StringBuilder()
-            var detailsHeaderPrinted = false
-            terminalStreamBlocks.forEach { block ->
-                if (output.isNotEmpty()) {
-                    output.append("\n\n")
-                }
-                when (block.type) {
-                    TerminalStreamBlockType.ASSISTANT -> {
-                        output.append(assistantLabel)
-                        output.append("://")
-                        output.append(block.text)
-                    }
-
-                    TerminalStreamBlockType.DETAIL -> {
-                        if (!detailsHeaderPrinted) {
-                            output.append("──────── STREAM DETAILS ────────\n")
-                            detailsHeaderPrinted = true
-                        }
-                        output.append(block.text)
-                    }
-                }
-            }
-            return output.toString()
         }
     }
 

@@ -191,17 +191,83 @@
                         tools:text="next meeting\n09:30 AM • Team sync\nin 42m\n\nTap MIC to start voice input." />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/terminal_output"
+                <LinearLayout
+                    android:id="@+id/terminal_output_container"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:fontFamily="monospace"
-                    android:gravity="top|start"
-                    android:lineSpacingExtra="3dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
                     android:paddingTop="4dp"
-                    android:textColor="@color/cyber_text_dim"
-                    android:textSize="12sp"
-                    android:visibility="gone" />
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/terminal_transcript_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.08"
+                        android:text="USR://"
+                        android:textColor="@color/cyber_cyan"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/terminal_transcript"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="monospace"
+                        android:lineSpacingExtra="3dp"
+                        android:textColor="@color/cyber_text_dim"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/terminal_assistant_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.08"
+                        android:text="MISHELL://"
+                        android:textColor="@color/cyber_pink"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
+                    <com.fluid.afm.markdown.widget.PrinterMarkDownTextView
+                        android:id="@+id/terminal_output"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:textColor="@color/cyber_text_dim"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/terminal_details_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.08"
+                        android:text="STREAM://"
+                        android:textColor="@color/cyber_cyan"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/terminal_details"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="monospace"
+                        android:lineSpacingExtra="3dp"
+                        android:textColor="@color/cyber_text_dim"
+                        android:textSize="11sp"
+                        android:visibility="gone" />
+                </LinearLayout>
             </FrameLayout>
         </ScrollView>
 
