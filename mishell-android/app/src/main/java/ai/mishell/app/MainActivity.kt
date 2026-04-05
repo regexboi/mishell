@@ -69,6 +69,9 @@ import kotlin.math.roundToLong
 class MainActivity : AppCompatActivity() {
     companion object {
         private const val LOG_TAG = "MishellVoice"
+        private const val GROQ_TRANSCRIPTION_URL =
+            "https://api.groq.com/openai/v1/audio/transcriptions"
+        private const val GROQ_TRANSCRIPTION_MODEL = "whisper-large-v3-turbo"
         private const val STT_MAX_ATTEMPTS = 3
         private const val SQUIRT_MIN_WPM = 180
         private const val SQUIRT_MAX_WPM = 1100
@@ -950,7 +953,7 @@ class MainActivity : AppCompatActivity() {
     private suspend fun streamMishellAssistantResponse(transcript: String) {
         llmStreamClient.streamText(
             url = BuildConfig.LLM_STREAM_URL,
-            apiKey = BuildConfig.STT_API_KEY,
+            apiKey = BuildConfig.MISHELL_API_KEY,
             text = transcript,
             sessionId = sessionId,
             onCallLifecycle = { call -> activeLlmCall = call },
@@ -1072,24 +1075,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun transcribeRecording(file: File): String {
-        if (BuildConfig.STT_URL.isBlank()) {
-            throw IOException("STT URL is not configured.")
+        if (BuildConfig.GROQ_API_KEY.isBlank()) {
+            throw IOException("Groq API key is not configured.")
         }
 
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart(
-                "audio",
+                "file",
                 file.name,
                 file.asRequestBody("audio/mp4".toMediaType())
             )
-            .addFormDataPart("language", "en")
-            .addFormDataPart("model", "whisper-1")
+            .addFormDataPart("model", GROQ_TRANSCRIPTION_MODEL)
+            .addFormDataPart("temperature", "0")
+            .addFormDataPart("response_format", "verbose_json")
             .build()
 
         val request = Request.Builder()
-            .url(BuildConfig.STT_URL)
-            .addHeader("x-api-key", BuildConfig.STT_API_KEY)
+            .url(GROQ_TRANSCRIPTION_URL)
+            .addHeader("Authorization", "Bearer ${BuildConfig.GROQ_API_KEY}")
             .post(requestBody)
             .build()
 

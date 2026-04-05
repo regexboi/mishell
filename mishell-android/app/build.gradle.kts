@@ -38,22 +38,22 @@ fun readDotEnv(file: File): Map<String, String> {
 
 val dotEnv = readDotEnv(rootProject.file(".env"))
 
-val sttApiKey = (localProperties.getProperty("STT_API_KEY")
-    ?: System.getenv("STT_API_KEY")
-    ?: dotEnv["STT_API_KEY"]
+val mishellApiKey = (localProperties.getProperty("MISHELL_API_KEY")
+    ?: System.getenv("MISHELL_API_KEY")
+    ?: dotEnv["MISHELL_API_KEY"]
     ?: "").trim()
-val sttUrl = (localProperties.getProperty("STT_URL")
-    ?: System.getenv("STT_URL")
-    ?: dotEnv["STT_URL"]
-    ?: "https://x.li-daggertooth.ts.net/mishell-mcp/api/speech/transcribe").trim()
+val groqApiKey = (localProperties.getProperty("GROQ_API_KEY")
+    ?: System.getenv("GROQ_API_KEY")
+    ?: dotEnv["GROQ_API_KEY"]
+    ?: "").trim()
 val llmStreamUrl = (localProperties.getProperty("LLM_STREAM_URL")
     ?: System.getenv("LLM_STREAM_URL")
     ?: dotEnv["LLM_STREAM_URL"]
-    ?: "https://x.li-daggertooth.ts.net/mishell-mcp/v1/llm/stream").trim()
+    ?: "https://mini.li-daggertooth.ts.net/mishell-mcp/v1/llm/stream").trim()
 val clawdiaGatewayUrl = (localProperties.getProperty("CLAWDIA_GATEWAY_URL")
     ?: System.getenv("CLAWDIA_GATEWAY_URL")
     ?: dotEnv["CLAWDIA_GATEWAY_URL"]
-    ?: "https://x.li-daggertooth.ts.net/openclaw").trim()
+    ?: "https://mini.li-daggertooth.ts.net/openclaw").trim()
 val neonString = (localProperties.getProperty("NEON_STRING")
     ?: System.getenv("NEON_STRING")
     ?: dotEnv["NEON_STRING"]
@@ -72,8 +72,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "STT_API_KEY", quoteForBuildConfig(sttApiKey))
-        buildConfigField("String", "STT_URL", quoteForBuildConfig(sttUrl))
+        buildConfigField("String", "MISHELL_API_KEY", quoteForBuildConfig(mishellApiKey))
+        buildConfigField("String", "GROQ_API_KEY", quoteForBuildConfig(groqApiKey))
         buildConfigField("String", "LLM_STREAM_URL", quoteForBuildConfig(llmStreamUrl))
         buildConfigField("String", "CLAWDIA_GATEWAY_URL", quoteForBuildConfig(clawdiaGatewayUrl))
         buildConfigField("String", "NEON_STRING", quoteForBuildConfig(neonString))
