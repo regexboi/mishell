@@ -7,7 +7,7 @@
     <string name="tile_config">Config</string>
     <string name="diagnostic_title">TERMINAL / DIAGNOSTICS</string>
     <string name="diagnostic_title_squirt">TERMINAL / SQUIRT MODE</string>
-    <string name="mic_label">MIC</string>
+    <string name="mic_label">TALK</string>
     <string name="mic_idle">VOICE INPUT: IDLE</string>
     <string name="mic_listening">VOICE INPUT: LISTENING</string>
     <string name="mic_transcribing">VOICE INPUT: TRANSCRIBING</string>
@@ -16,9 +16,9 @@
     <string name="mic_start_failed">Could not start recording: %1$s</string>
     <string name="mic_recording_too_short">Recording too short. Please try again.</string>
     <string name="terminal_waiting">SYS://ready
-Tap MIC to start voice input.</string>
+Tap TALK to start voice input.</string>
     <string name="terminal_recording">SYS://recording
-Tap MIC again to transcribe.</string>
+Tap TALK again to transcribe.</string>
     <string name="terminal_transcribing">SYS://transcribing audio...</string>
     <string name="terminal_empty_transcript">(No transcript returned)</string>
     <string name="terminal_error">ERR://%1$s</string>
@@ -51,7 +51,7 @@ Tap MIC again to transcribe.</string>
     <string name="config_backend_clawdia">Clawdia</string>
     <string name="config_clawdia_title">Clawdia gateway auth</string>
     <string name="config_clawdia_description">Self-serve setup. Save credentials, trust TLS fingerprint, and verify gateway connectivity from this screen.</string>
-    <string name="config_clawdia_url_hint">Gateway URL (e.g. https://x.li-daggertooth.ts.net/openclaw)</string>
+    <string name="config_clawdia_url_hint">Gateway URL (e.g. https://mini.li-daggertooth.ts.net/openclaw)</string>
     <string name="config_clawdia_token_hint">Gateway token (preferred)</string>
     <string name="config_clawdia_password_hint">Gateway password (fallback)</string>
     <string name="config_clawdia_save_test">Save + Trust + Test Clawdia</string>

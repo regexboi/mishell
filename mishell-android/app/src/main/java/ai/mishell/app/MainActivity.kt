@@ -126,7 +126,7 @@ class MainActivity : AppCompatActivity() {
     private var rssTickerJob: Job? = null
     private var homeClockJob: Job? = null
     private var terminalIdleJob: Job? = null
-    private var rssTickerTitles: List<String> = emptyList()
+    private var rssTickerItems: List<RssTickerItem> = emptyList()
     private var rssTickerOffset = 0
     private var cachedNextMeetingSummary = ""
     private var cachedNextMeetingFetchedAt = 0L
@@ -145,9 +145,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var terminalTapDetector: GestureDetector
     private val defaultConstraints = ConstraintSet()
     private val fullscreenConstraints = ConstraintSet()
-    private val wisprConstraints = ConstraintSet()
-    private val wisprFullscreenConstraints = ConstraintSet()
-    private var isWisprTextMode = false
     private var wisprDraftText = ""
     private var wisprComposeDialog: AlertDialog? = null
     private val assistantTextLock = Any()
@@ -175,6 +172,12 @@ class MainActivity : AppCompatActivity() {
         val rightColumn: String
     )
 
+    private data class RssTickerItem(
+        val articleId: String,
+        val title: String,
+        val link: String?
+    )
+
     private val audioPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -196,7 +199,7 @@ class MainActivity : AppCompatActivity() {
         setupTiles()
         setupTerminalFullscreenToggle()
         setupMicButton()
-        setupWisprInputBar()
+        setupBottomBanner()
         setupSquirtControls()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -212,7 +215,6 @@ class MainActivity : AppCompatActivity() {
 
         renderSquirtPlaceholder()
         binding.bottomBanner.isSelected = true
-        setWisprTextMode(AppSettings.isWisprTextModeEnabled(this), animate = false)
         setTerminalFullscreen(isTerminalFullscreen, animate = false, force = true)
         showTerminalLogo()
         startRssTicker()
@@ -429,7 +431,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        setWisprTextMode(AppSettings.isWisprTextModeEnabled(this), animate = false)
         onDisplayForegrounded()
         if (::binding.isInitialized &&
             binding.terminalIdleContainer.visibility == View.VISIBLE &&
@@ -520,20 +521,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
         binding.micButton.setOnClickListener(onMicClick)
-    }
-
-    private fun setupWisprInputBar() {
-        binding.wisprInput.showSoftInputOnFocus = false
-        binding.wisprInput.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus) {
-                suppressSystemKeyboard()
+        binding.micButton.setOnLongClickListener {
+            if (isRecording) {
+                false
+            } else {
+                showWisprComposeDialog()
+                true
             }
         }
-        binding.wisprInput.setOnClickListener {
-            suppressSystemKeyboard()
-        }
-        binding.wisprSendButton.setOnClickListener {
-            submitWisprPrompt()
+    }
+
+    private fun setupBottomBanner() {
+        binding.bottomBanner.setOnClickListener {
+            openCurrentTickerItem()
         }
     }
 
@@ -581,8 +581,6 @@ class MainActivity : AppCompatActivity() {
     private fun setupTerminalFullscreenToggle() {
         defaultConstraints.clone(binding.root)
         fullscreenConstraints.clone(binding.root)
-        wisprConstraints.clone(binding.root)
-        wisprFullscreenConstraints.clone(binding.root)
 
         fullscreenConstraints.connect(
             binding.diagnosticPanel.id,
@@ -613,79 +611,12 @@ class MainActivity : AppCompatActivity() {
         fullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.TOP, 0)
         fullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.BOTTOM, 0)
 
-        wisprConstraints.connect(
-            binding.diagnosticPanel.id,
-            ConstraintSet.END,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.END
-        )
-        wisprConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.END, 0)
-        wisprConstraints.clear(binding.bottomBanner.id, ConstraintSet.START)
-        wisprConstraints.clear(binding.bottomBanner.id, ConstraintSet.END)
-        wisprConstraints.connect(
-            binding.bottomBanner.id,
-            ConstraintSet.START,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.START
-        )
-        wisprConstraints.connect(
-            binding.bottomBanner.id,
-            ConstraintSet.END,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.END
-        )
-        wisprConstraints.setMargin(binding.bottomBanner.id, ConstraintSet.START, 0)
-        wisprConstraints.setMargin(binding.bottomBanner.id, ConstraintSet.END, 0)
-
-        wisprFullscreenConstraints.connect(
-            binding.diagnosticPanel.id,
-            ConstraintSet.START,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.START
-        )
-        wisprFullscreenConstraints.connect(
-            binding.diagnosticPanel.id,
-            ConstraintSet.END,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.END
-        )
-        wisprFullscreenConstraints.connect(
-            binding.diagnosticPanel.id,
-            ConstraintSet.TOP,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.TOP
-        )
-        wisprFullscreenConstraints.connect(
-            binding.diagnosticPanel.id,
-            ConstraintSet.BOTTOM,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.BOTTOM
-        )
-        wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.START, 0)
-        wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.END, 0)
-        wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.TOP, 0)
-        wisprFullscreenConstraints.setMargin(binding.diagnosticPanel.id, ConstraintSet.BOTTOM, 0)
-
         terminalTapDetector = GestureDetector(
             this,
             object : GestureDetector.SimpleOnGestureListener() {
                 override fun onDown(e: MotionEvent): Boolean = true
 
-                override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                    if (isPointInsideViewRaw(binding.diagnosticHeader, e.rawX, e.rawY)) {
-                        toggleTerminalFullscreen()
-                        return true
-                    }
-                    if (
-                        isWisprTextMode &&
-                        !isSquirtMode &&
-                        shouldHandleTerminalSingleTap(e.rawX, e.rawY)
-                    ) {
-                        showWisprComposeDialog()
-                        return true
-                    }
-                    return false
-                }
+                override fun onSingleTapConfirmed(e: MotionEvent): Boolean = false
 
                 override fun onFling(
                     e1: MotionEvent?,
@@ -801,38 +732,20 @@ class MainActivity : AppCompatActivity() {
         }
 
         when {
-            fullscreen && isWisprTextMode -> wisprFullscreenConstraints.applyTo(binding.root)
             fullscreen -> fullscreenConstraints.applyTo(binding.root)
-            isWisprTextMode -> wisprConstraints.applyTo(binding.root)
             else -> defaultConstraints.applyTo(binding.root)
         }
 
         if (fullscreen) {
             binding.iconGrid.visibility = View.GONE
             binding.bottomBanner.visibility = View.GONE
-            binding.wisprInputBar.visibility = View.GONE
-            binding.rightStack.visibility = View.GONE
+            binding.micButton.visibility = View.GONE
         } else {
             binding.iconGrid.visibility = View.VISIBLE
             binding.bottomBanner.visibility = View.VISIBLE
-            binding.wisprInputBar.visibility = View.VISIBLE
-            binding.rightStack.visibility = View.VISIBLE
+            binding.micButton.visibility = View.VISIBLE
         }
         scrollTerminalToBottom()
-    }
-
-    private fun setWisprTextMode(enabled: Boolean, animate: Boolean) {
-        if (isWisprTextMode == enabled) {
-            return
-        }
-        isWisprTextMode = enabled
-        if (!enabled) {
-            binding.wisprInput.clearFocus()
-            wisprComposeDialog?.dismiss()
-        } else {
-            suppressSystemKeyboard()
-        }
-        setTerminalFullscreen(isTerminalFullscreen, animate = animate, force = true)
     }
 
     private fun setSquirtMode(enabled: Boolean) {
@@ -847,11 +760,6 @@ class MainActivity : AppCompatActivity() {
                 interpolator = DecelerateInterpolator(1.4f)
             }
         )
-        binding.diagnosticHeader.text = if (enabled) {
-            getString(R.string.diagnostic_title_squirt)
-        } else {
-            getString(R.string.diagnostic_title)
-        }
         binding.terminalScroll.visibility = if (enabled) View.GONE else View.VISIBLE
         binding.squirtContainer.visibility = if (enabled) View.VISIBLE else View.GONE
 
@@ -962,7 +870,6 @@ class MainActivity : AppCompatActivity() {
             recordingFile = outputFile
             isRecording = true
             setMicButtonSelected(true)
-            binding.micStatus.text = getString(R.string.mic_listening)
             showTerminalText(getString(R.string.terminal_recording))
         } catch (error: Exception) {
             outputFile.delete()
@@ -993,21 +900,8 @@ class MainActivity : AppCompatActivity() {
         uploadRecording(file)
     }
 
-    private fun submitWisprPrompt() {
-        if (isBusy) {
-            return
-        }
-        val transcript = binding.wisprInput.text?.toString()?.trim().orEmpty()
-        if (transcript.isBlank()) {
-            return
-        }
-        binding.wisprInput.text?.clear()
-        suppressSystemKeyboard()
-        submitTextPrompt(transcript)
-    }
-
     private fun showWisprComposeDialog() {
-        if (!isWisprTextMode || isBusy || isFinishing || isDestroyed) {
+        if (isBusy || isFinishing || isDestroyed) {
             return
         }
         if (wisprComposeDialog?.isShowing == true) {
@@ -1069,7 +963,6 @@ class MainActivity : AppCompatActivity() {
         latestTranscript = transcript
         isBusy = true
         setMicButtonEnabled(false)
-        setWisprInputEnabled(false)
         showGeneratingState(transcript)
 
         activeWorkJob = lifecycleScope.launch {
@@ -1098,8 +991,6 @@ class MainActivity : AppCompatActivity() {
         resetAssistantStreamState()
         isBusy = true
         setMicButtonEnabled(false)
-        setWisprInputEnabled(false)
-        binding.micStatus.text = getString(R.string.mic_transcribing)
         showTerminalText(getString(R.string.terminal_transcribing))
 
         activeWorkJob = lifecycleScope.launch {
@@ -1146,7 +1037,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showGeneratingState(transcript: String) {
-        binding.micStatus.text = getString(R.string.mic_generating)
         renderTranscriptAndAssistant(transcript, "")
         renderSquirtPlaceholder()
         ensureSquirtPlaybackLoop()
@@ -1269,8 +1159,6 @@ class MainActivity : AppCompatActivity() {
         withContext(NonCancellable + Dispatchers.Main.immediate) {
             isBusy = false
             setMicButtonEnabled(true)
-            setWisprInputEnabled(true)
-            binding.micStatus.text = getString(R.string.mic_idle)
 
             if (errorMessage != null) {
                 showTerminalError(errorMessage)
@@ -1409,24 +1297,14 @@ class MainActivity : AppCompatActivity() {
     private fun resetIdleMicState() {
         isRecording = false
         setMicButtonSelected(false)
-        binding.micStatus.text = getString(R.string.mic_idle)
     }
 
     private fun setMicButtonEnabled(enabled: Boolean) {
         binding.micButton.isEnabled = enabled
     }
 
-    private fun setWisprInputEnabled(enabled: Boolean) {
-        binding.wisprInput.isEnabled = enabled
-        binding.wisprSendButton.isEnabled = enabled
-    }
-
     private fun setMicButtonSelected(selected: Boolean) {
         binding.micButton.isSelected = selected
-    }
-
-    private fun suppressSystemKeyboard() {
-        getInputManager()?.hideSoftInputFromWindow(binding.wisprInput.windowToken, 0)
     }
 
     private fun getInputManager(): InputMethodManager? {
@@ -1849,7 +1727,7 @@ class MainActivity : AppCompatActivity() {
             append("next meeting\n")
             append(cachedNextMeetingSummary)
             append("\n\n")
-            append("tip: tap MIC to start voice input")
+            append("tip: tap TALK to start voice input")
         }
         return TerminalIdleSnapshot(leftColumn = left, rightColumn = right)
     }
@@ -1977,31 +1855,39 @@ class MainActivity : AppCompatActivity() {
         }
         rssTickerJob = lifecycleScope.launch {
             while (isActive) {
-                val titles = runCatching {
+                val items = runCatching {
                     RssRepository.fetchArticles(
                         this@MainActivity,
                         limit = 120,
                         highSignalOnly = true
                     )
-                        .mapNotNull { it.title.takeIf(String::isNotBlank) }
-                        .distinct()
+                        .mapNotNull { article ->
+                            article.title.takeIf(String::isNotBlank)?.let { title ->
+                                RssTickerItem(
+                                    articleId = article.id,
+                                    title = title,
+                                    link = article.link
+                                )
+                            }
+                        }
+                        .distinctBy { it.articleId }
                 }.getOrNull().orEmpty()
 
-                if (titles.isNotEmpty()) {
-                    rssTickerTitles = titles
-                    if (rssTickerOffset >= rssTickerTitles.size) {
+                if (items.isNotEmpty()) {
+                    rssTickerItems = items
+                    if (rssTickerOffset >= rssTickerItems.size) {
                         rssTickerOffset = 0
                     }
                     renderRssTickerWindow()
-                } else if (rssTickerTitles.isEmpty()) {
+                } else if (rssTickerItems.isEmpty()) {
                     binding.bottomBanner.text = getString(R.string.banner_text)
                 }
 
                 repeat(8) {
                     delay(8_000L)
                     if (!isActive) return@launch
-                    if (rssTickerTitles.isNotEmpty()) {
-                        rssTickerOffset = (rssTickerOffset + 1) % rssTickerTitles.size
+                    if (rssTickerItems.isNotEmpty()) {
+                        rssTickerOffset = (rssTickerOffset + 1) % rssTickerItems.size
                         renderRssTickerWindow()
                     }
                 }
@@ -2010,14 +1896,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderRssTickerWindow() {
-        if (rssTickerTitles.isEmpty()) {
+        if (rssTickerItems.isEmpty()) {
             return
         }
-        val itemCount = min(14, rssTickerTitles.size)
+        val itemCount = min(14, rssTickerItems.size)
         val windowItems = buildList(itemCount) {
             for (index in 0 until itemCount) {
-                val position = (rssTickerOffset + index) % rssTickerTitles.size
-                add(rssTickerTitles[position])
+                val position = (rssTickerOffset + index) % rssTickerItems.size
+                add(rssTickerItems[position].title)
             }
         }
         binding.bottomBanner.text = buildString {
@@ -2026,6 +1912,14 @@ class MainActivity : AppCompatActivity() {
             append(" //")
         }
         binding.bottomBanner.isSelected = true
+    }
+
+    private fun openCurrentTickerItem() {
+        val item = rssTickerItems.getOrNull(rssTickerOffset) ?: return
+        startActivity(
+            Intent(this, ArticleReaderActivity::class.java)
+                .putExtra(ArticleReaderActivity.EXTRA_ARTICLE_ID, item.articleId)
+        )
     }
 
     override fun onDestroy() {
